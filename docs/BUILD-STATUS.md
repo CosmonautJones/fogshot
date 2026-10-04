@@ -10,6 +10,8 @@ Visibility: public. Default branch: `main`. Bootstrap commit `3d445ed3e2c8e61e22
 
 Gameplay work is on branch `cursor/first-playable-66d6`. This file is updated when a slice is verified. A local commit is not remote progress until its push succeeds.
 
+The authoritative browser match is commit `4d3f4867a7a9d8fe00aa20ade906315e3a919303` on that branch. Push status is recorded at the end of this file after `git push`.
+
 ## What runs
 
 Jac 0.37.23, Pymunk 7.3.0, pull-back aim, turn rules, one trusted siege shot, an allowlist view, a two-seat journal, a supply walk, and a Phaser field driven by one shared match.
@@ -127,6 +129,10 @@ Browser proof against `jac run` at `http://localhost:8000/` (API `http://localho
 - Page errors on both contexts: none.
 
 Screenshots: `/opt/cursor/artifacts/fogshot-reveal-open.png` and `/opt/cursor/artifacts/fogshot-reveal-closed.png`.
+
+## Remote
+
+`4d3f4867a7a9d8fe00aa20ade906315e3a919303` is the local commit for this slice. If the push below this line is missing, that SHA is not on the remote yet.
 
 ## Next task
 
