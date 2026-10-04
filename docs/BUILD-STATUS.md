@@ -277,7 +277,27 @@ The Vite proxy at `http://127.0.0.1:8000/function/join_seat` returned the same s
 
 ## Next task
 
-Stabilization is in progress on this branch. The next slice is the command envelope: epoch, expected turn, expected revision, weapon, and command id on the real client path. JacHammer stays unattempted. This environment has no JacHammer credentials or remote application target. Do not treat localhost as a deploy.
+The next stabilization slice is a first-impact reveal, including terrain misses and a larger non-damaging flare patch. JacHammer stays unattempted. This environment has no JacHammer credentials or remote application target. One `jac run` process is the supported worker model. Do not treat localhost as a deploy.
+
+## Shot transaction
+
+`tests/transaction_tests.jac` first failed because `fail_storage` was ignored and the core shot still returned ok (`1 failed in 2.86s`). `tests/physics_driver_tests.jac` first failed `a restored core collides after its shape was removed` because `restore` put the health flag back and left the collider out of the space.
+
+The canonical file is `canonical.json`, version 1, solver `pymunk-7.3.0`. It is replaced only after simulation. A storage or simulation failure restores the prior bodies, joints, supply flags, rules, and command list, and clears `in_flight`. Restart loads that file instead of replaying inputs. Rematch deletes it. An unknown version sets `refused` and `take_shot` returns `snapshot`. This is one process, not a multi-worker lock.
+
+## Command envelope
+
+Red run of `tests/command_envelope_tests.jac` before the arguments existed: compile error `E1051` too many positional arguments. After the arguments existed but `take_shot` still substituted the server revision and re-inferred the weapon: `3 failed in 3.34s`. The flare retry was not ok, the old-revision shell was accepted, and a shell intent on the flare id was accepted.
+
+Green:
+
+```text
+JAC_TEST_STRICT=1 jac test tests/physics_driver_tests.jac tests/scene_host_tests.jac tests/aim_rules_tests.jac tests/siege_view_tests.jac tests/authority_tests.jac tests/supply_tests.jac tests/live_match_tests.jac tests/outcome_tests.jac tests/qa_match_tests.jac tests/clock_authority_tests.jac tests/command_envelope_tests.jac -v
+```
+
+Result: `41 passed in 1.78s`.
+
+The browser sends epoch, turn, revision, weapon, and reuses a pending command id when `loose_shot` throws. A successful response clears that id. Rematch clears it and increments the match epoch stored in `seats.json`. An exact flare retry after combat does not simulate again. A new command with revision 0 on A's later turn returns `revision`. A changed weapon on the same id returns `conflict`. An epoch-1 command after rematch returns `epoch` and does not open a reveal.
 
 ## Stabilization baseline
 

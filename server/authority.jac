@@ -22,6 +22,8 @@ obj Table {
     has epoch: int = 1;
     has in_flight: bool = False;
     has fail_before_commit: bool = False;
+    has fail_storage: bool = False;
+    has fail_simulate: bool = False;
     has force_finished: bool = False;
     has commits: list[str] = [];
     has payloads: list[str] = [];
@@ -129,6 +131,31 @@ def open_table(invite: str, directory: str) -> Table {
 
 def save_seats(table: Table) -> None {
     _write_seats(table);
+}
+
+def append_commit(table: Table, command_id: str, actor: str, weapon: str, angle: float, power: float) -> None {
+    table.shots = table.shots + 1;
+    table.turn = table.rules.turn;
+    table.revision = table.rules.revision;
+    payload = _payload(actor, table.revision, table.turn, weapon, angle, power, table.epoch);
+    _append_commit(table, command_id, payload);
+}
+
+def write_commit_line(table: Table, command_id: str, payload: str) -> None {
+    line = json.dumps({
+        "id": command_id,
+        "payload": payload,
+        "shots": table.shots,
+        "turn": table.turn,
+        "revision": table.revision,
+        "phase": table.rules.phase,
+        "active": table.rules.active,
+        "result": table.rules.result,
+        "flare_a": table.rules.flare_a,
+        "flare_b": table.rules.flare_b
+    });
+    current = _read_text(_journal_path(table.directory));
+    _write_text(_journal_path(table.directory), current + line + "\n");
 }
 
 def claim(table: Table, player_id: str, invite: str) -> ClaimResult {

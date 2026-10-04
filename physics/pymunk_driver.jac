@@ -41,6 +41,10 @@ def _drop(space, body, shape, pin):
         space.remove(pin)
     space.remove(body, shape)
 
+def _keep_shape(space, shape):
+    if shape not in space.shapes:
+        space.add(shape)
+
 def _static_box(space, body_id, x, y, w, h):
     import pymunk
     body = pymunk.Body(body_type=pymunk.Body.STATIC)
@@ -378,6 +382,9 @@ obj PhysicsWorld {
             if item.broken and track.pin is not None {
                 self.space.remove(track.pin);
                 track.pin = None;
+            }
+            if track.role == "core" and not item.broken {
+                _keep_shape(self.space, track.shape);
             }
             if not item.broken and track.pin is None and track.hinged {
                 fresh = _pymunk().PinJoint(

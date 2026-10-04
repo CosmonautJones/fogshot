@@ -12,6 +12,26 @@ test "projectile contacts a thin support" {
     assert outcome.steps == 900, "simulation ignored its step bound";
 }
 
+test "a restored core collides after its shape was removed" {
+    world = PhysicsWorld();
+    world.add_ground("ground", -2.0, 0.0, 30.0, 0.0);
+    world.add_static_box("core", 8.0, 1.0, 0.8, 0.8, 0.2);
+    saved = world.capture();
+    world.hurt("core", 5.0);
+    broken = world.find("core");
+    assert broken is not None and broken.broken;
+    world.add_projectile("shot", 4.0, 1.0, 12.0, 0.0, 0.16);
+    missed = world.simulate(max_steps=400);
+    assert not missed.contacted("shot", "core");
+    world.restore(saved);
+    healed = world.find("core");
+    assert healed is not None and not healed.broken;
+    world.drop_projectiles();
+    world.add_projectile("shot", 4.0, 1.0, 12.0, 0.0, 0.16);
+    hit = world.simulate(max_steps=400);
+    assert hit.contacted("shot", "core");
+}
+
 test "broken brace lets a leaning support rotate and fall" {
     world = PhysicsWorld();
     world.add_ground("ground", -8.0, 0.0, 8.0, 0.0);
