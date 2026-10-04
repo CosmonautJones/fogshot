@@ -37,10 +37,10 @@ Derive actual codespace annotations and scaffold paths from the selected compile
 
 ## Task 2: Input and pure rules
 
-- [ ] Define typed shot command (ID, expected revision/turn, weapon, angle, power), private checkpoint, private physics result, public player view, and public replay separately.
-- [ ] Test drag cancel, duplicate pointer events, resize/device-pixel ratio, mirrored aim, finite input validation, wrong phase/turn/actor, and victory/draw.
-- [ ] Implement pure Jac input conversion and explicit rules. Start with fixed gravity, no wind/spread, and a limited initial guide with no hidden collision query.
-- [ ] Verify, commit, and push.
+- [x] Test drag cancel, duplicate pointer events, resize/device-pixel ratio, mirrored aim, finite input validation, wrong phase/turn/actor, and victory/draw. `tests/aim_rules_tests.jac`, 11 passed.
+- [x] Implement pure Jac input conversion and explicit rules. Fixed gravity, no wind or spread, and a short guide that stops at the midline without a collision query. `game/aim.jac`, `game/rules.jac`.
+- [ ] Typed private checkpoint, private physics result, public player view, and public replay are still task 4. Shot command fields are the `accept_shot` parameters (actor, revision, turn, weapon, angle, power). A command id belongs with match authority.
+- [ ] Commit and push this slice. Check this only after the push command succeeds.
 
 ## Task 3: Actual physics
 

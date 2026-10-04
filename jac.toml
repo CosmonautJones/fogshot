@@ -39,6 +39,7 @@ default = "server"
 "server.*" = "server"
 "graph.*" = "server"
 "game.rules" = "server"
+"game.aim" = "server"
 "game.private_world" = "server"
 "game.balance" = "server"
 
