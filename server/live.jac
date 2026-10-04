@@ -321,7 +321,7 @@ def _load_canonical(live: LiveMatch) -> bool {
 
 def shared_match() -> LiveMatch {
     if _shared is None {
-        _shared = boot_match("runtime-data/browser-match");
+        _shared = boot_match(".fogshot-match");
     }
     return _shared as LiveMatch;
 }
@@ -562,7 +562,7 @@ def _filtered_path(live: LiveMatch, seat: str) -> list[list[float]] {
         if seat == "B" and x >= 20.0 {
             home = True;
         }
-        if home or _in_reveal(live, x, y) {
+        if home or (seat == live.reveal_seat and _in_reveal(live, x, y)) {
             points.append(point);
         }
     }

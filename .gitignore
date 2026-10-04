@@ -29,6 +29,7 @@ coverage/
 *.sqlite-*
 *.db
 runtime-data/
+.fogshot-match/
 private-replays/
 *.log
 test-results/

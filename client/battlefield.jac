@@ -3,7 +3,7 @@
 import from "react" { useEffect }
 import from "@jac/runtime" { SignupResult, jacLogin, jacSignup }
 import from "./mount_field.js" { mountField }
-import from "./playback.js" { sampleAt }
+import from "./playback.js" { sampleAt, shellWord }
 import from server.live { join_seat, loose_shot, play_again, watch_match }
 
 glob INVITE: str = "fogshot";
@@ -65,7 +65,7 @@ def _note(raw: str) -> None {
     parsed = JSON.parse(raw) as any;
     _remember(parsed);
     supply = "on" if parsed.own_powered != False else "dark";
-    shell = "ready" if parsed.shot_ready != False else "held";
+    shell = shellWord(parsed.shot_ready != False, parsed.your_turn == True);
     text = "Seat " + str(parsed.seat) + " / " + str(parsed.phase) + " / " + str(parsed.weapon) + " / supply " + supply + " / shell " + shell + ". Pull back from the launcher. The shot is the server result.";
     if parsed.result {
         text = text + " Result " + str(parsed.result) + ".";

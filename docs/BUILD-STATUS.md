@@ -275,9 +275,34 @@ The same process logged `127.0.0.1 "POST /function/join_seat HTTP/1.1" 401 106 0
 
 The Vite proxy at `http://127.0.0.1:8000/function/join_seat` returned the same status and the same body. Its API request id was `f1f81b14405947b98665e67cf84f6adc`.
 
+## Reveal playback stops
+
+An independent read of `55e51fb` kept the gold dot after the server path was empty. Seat A's `data-shot-screen-x` moved from 324 through the fog edge at 400 and parked at 410.16. Seat B was already at filtered time 4.78 while A's dot was at 0.33s. A's `data-broken` stayed true after the payload cleared it, and the caption still said `shell ready` while `data-your-turn` was false.
+
+Red run, before `stepWatch` cleared an empty list:
+
+```text
+node --test tests/playback_client.test.mjs
+```
+
+Result: `2 failed` of 7. `an empty watch stops the dot and drops a break the server cleared` kept the previous path. `a filtered tail is not on screen while the shooter is still at the start` drew the sample at time 4.78 when elapsed was 0.33.
+
+The empty watch now drops the path, the collapse, and the dot. A sample is not drawn before its timestamp. `data-broken` follows the payload, including `false`. The caption says `shell waiting` when it is not that seat's turn and `shell ready` when it is. The other seat's path no longer includes the hidden side of the fog. The live match directory is `.fogshot-match`, which the dev inventory skips, so a match write during a client rebuild does not raise `E7005`.
+
+Green:
+
+```text
+node --test tests/playback_client.test.mjs
+JAC_TEST_STRICT=1 jac test tests/playback_tests.jac -v
+```
+
+Node: `7 passed`. Jac playback file: `1 passed in 0.31s`. The full suite, same file list as the 48-test run, was `48 passed in 3.48s`.
+
+Two browsers on `http://127.0.0.1:8000/`, clean `.fogshot-match`. During A's shell, A's shot time moved 0.22, 0.44, 0.67 at screen x 141, 162, 183. B did not show time 4.78. After A's reveal closed, A's `data-reveal` was `closed`, `data-broken` was `false`, `data-post-angle` was `0`, and `data-shot-screen-x` stayed empty on a later read. A's caption was `shell waiting`. B's caption was `supply dark / shell ready`, `data-broken` true, angle `0.9518626481783586`, and the shot dataset empty. No page errors and no Vite overlay. Rectangles and the launcher ring are still placeholders. A's own mast remains visible on A's dark half.
+
 ## Next task
 
-The next tasks are the shared-password replacement, separate rooms, a repeatable CI check, and a JacHammer proof. None of those were started. This environment has no JacHammer credentials or remote application target. One `jac run` process is the supported worker model. Do not treat localhost as a deploy. Basic shots stay free. The four-objective economy is still the later milestone.
+Issue comments for #2–#5, then issue #6 Part A: a committed clean-checkout check, a real browser test, and a small GitHub Actions workflow. JacHammer is still not deployed. This environment has no JacHammer credentials or remote application target. One `jac run` process is the supported worker model. Do not treat localhost as a deploy. Basic shots stay free. The four-objective economy is still the later milestone.
 
 ## Two outposts
 

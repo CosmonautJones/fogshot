@@ -39,6 +39,10 @@ test "the other seat sees the impact path and not the hidden approach" {
     claim_player(live, "player-b");
     take_shot(live, "player-a", "flare-a", 20.0, 300.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "flare");
     take_shot(live, "player-b", "flare-b", 60.0, 300.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "flare");
+    others_flare = json.loads(watch(live, "player-a", 0));
+    for point in others_flare["path"] {
+        assert point[0] <= 20.0, "seat A drew seat B's shot inside A's fog";
+    }
     shell_raw = take_shot(live, "player-a", "shell-a", 20.0, 300.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "shell");
     shell = json.loads(shell_raw);
     assert shell["ok"];
@@ -48,7 +52,7 @@ test "the other seat sees the impact path and not the hidden approach" {
     assert len(watched["path"]) > 3;
     assert not shell["your_turn"];
     assert _times_hold(watched["path"]);
-    assert not _has_x_below(watched["path"], 16.0);
+    assert not _has_x_below(watched["path"], 20.0);
     assert _times_hold(shell["path"]);
     assert _has_x_below(shell["path"], 12.0);
     assert len(watched["path"]) <= 80;
@@ -60,7 +64,7 @@ test "the other seat sees the impact path and not the hidden approach" {
     resumed = boot_match(directory);
     restored = json.loads(watch(resumed, "player-b", 0));
     assert len(restored["path"]) > 3;
-    assert not _has_x_below(restored["path"], 16.0);
+    assert not _has_x_below(restored["path"], 20.0);
     guest = json.loads(watch(live, "nobody", 0));
     assert len(guest["path"]) == 0;
     assert len(guest["collapse"]) == 0;

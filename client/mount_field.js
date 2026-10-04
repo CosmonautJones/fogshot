@@ -3,7 +3,7 @@
 // post pose, and reveal bodies come from the server payload. This file does
 // not integrate a shot or decide a hit.
 import { AUTO, Game } from "phaser";
-import { isStale, releaseAllowed, sampleAt, sameSeries } from "./playback.js";
+import { isStale, releaseAllowed, sampleAt, stepWatch } from "./playback.js";
 
 const ARENA_W = 40;
 const ARENA_H = 16;
@@ -125,13 +125,12 @@ function remember(parent, data) {
     parent.dataset.yourTurn = data.your_turn ? "true" : "false";
     parent.dataset.epoch = data.epoch === undefined ? "" : String(data.epoch);
     parent.dataset.revision = data.revision === undefined ? "" : String(data.revision);
-    const seeing = Boolean(data.view && data.view.reveal) || Boolean(data.broken);
     if (data.phase === "recon") {
         parent.dataset.broken = "false";
         parent.dataset.postAngle = typeof data.angle === "number" ? String(data.angle) : "0";
-    } else if (seeing && typeof data.angle === "number") {
-        parent.dataset.postAngle = String(data.angle);
+    } else if (typeof data.broken === "boolean") {
         parent.dataset.broken = data.broken ? "true" : "false";
+        parent.dataset.postAngle = typeof data.angle === "number" ? String(data.angle) : "0";
     }
     const path = data.path || [];
     let maxX = 0;
@@ -143,6 +142,9 @@ function remember(parent, data) {
     if (path.length) {
         parent.dataset.shotMaxX = String(maxX);
         parent.dataset.authoritative = "pymunk";
+    } else if (Array.isArray(data.path)) {
+        parent.dataset.shotScreenX = "";
+        parent.dataset.shotTime = "";
     }
 }
 
@@ -244,24 +246,38 @@ export function mountField(parent) {
             update(time) {
                 const path = this.path;
                 if (!path || !path.length) {
+                    if (this.shot || this.collapseAngle !== null) {
+                        this.shot = null;
+                        this.collapseAngle = null;
+                        if (parent) {
+                            parent.dataset.shotScreenX = "";
+                            parent.dataset.shotTime = "";
+                        }
+                        paint(this, pull);
+                    }
                     return;
                 }
                 if (this.pathStart === null) {
                     this.pathStart = time;
                 }
                 const elapsed = (time - this.pathStart) / 1000;
-                const point = sampleAt(path, elapsed, 2);
-                if (!point) {
-                    return;
+                const point = sampleAt(path, elapsed, 2, false);
+                if (point) {
+                    this.shot = worldToScreen(point[0], point[1]);
+                    if (parent) {
+                        parent.dataset.shotScreenX = String(this.shot.x);
+                        parent.dataset.shotTime = String(point[2]);
+                    }
+                } else {
+                    this.shot = null;
+                    if (parent) {
+                        parent.dataset.shotScreenX = "";
+                        parent.dataset.shotTime = "";
+                    }
                 }
-                this.shot = worldToScreen(point[0], point[1]);
-                const falling = sampleAt(this.collapse, elapsed, 1);
+                const falling = sampleAt(this.collapse, elapsed, 1, true);
                 if (falling) {
                     this.collapseAngle = falling[0];
-                }
-                if (parent) {
-                    parent.dataset.shotScreenX = String(this.shot.x);
-                    parent.dataset.shotTime = String(point[2]);
                 }
                 paint(this, pull);
             },
@@ -311,15 +327,26 @@ export function mountField(parent) {
             if (typeof data.own_powered === "boolean") {
                 sceneRef.powered = data.own_powered;
             }
-            if (data.path && data.path.length && !sameSeries(sceneRef.path, data.path)) {
-                sceneRef.path = data.path;
-                sceneRef.pathStart = null;
-                sceneRef.shot = worldToScreen(data.path[0][0], data.path[0][1]);
+            const now = sceneRef.time ? sceneRef.time.now : 0;
+            const elapsed = sceneRef.pathStart === null ? 0 : (now - sceneRef.pathStart) / 1000;
+            const frame = stepWatch({
+                path: sceneRef.path,
+                collapse: sceneRef.collapse,
+                collapseId: sceneRef.collapseId,
+                broken: parent.dataset.broken === "true",
+                angle: Number(parent.dataset.postAngle || 0),
+            }, data, elapsed);
+            if (frame.path !== sceneRef.path) {
+                sceneRef.pathStart = frame.path ? now : null;
             }
-            if (data.collapse && data.collapse.length && !sameSeries(sceneRef.collapse, data.collapse)) {
-                sceneRef.collapse = data.collapse;
-                sceneRef.collapseId = data.collapse_id || "";
-                sceneRef.collapseAngle = data.collapse[0][0];
+            sceneRef.path = frame.path;
+            sceneRef.collapse = frame.collapse;
+            sceneRef.collapseId = frame.collapseId;
+            sceneRef.collapseAngle = frame.collapseAngle;
+            sceneRef.shot = frame.shot ? worldToScreen(frame.shot[0], frame.shot[1]) : null;
+            if (!frame.shot && parent) {
+                parent.dataset.shotScreenX = "";
+                parent.dataset.shotTime = "";
             }
             remember(parent, data);
             paint(sceneRef, pull);
