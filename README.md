@@ -4,7 +4,7 @@
 
 A Jac-first multiplayer physics-siege game: pull back, launch into a hidden outpost, remember the brief glimpse, and bring its infrastructure down.
 
-**Current status: repository bootstrap and design only. No playable game or passing gameplay tests are included yet.** See [BUILD-STATUS](docs/BUILD-STATUS.md).
+**Current status: Jac 0.37.23 plus a tested Pymunk 7.3.0 collision and brace-collapse driver. No playable match yet.** See [BUILD-STATUS](docs/BUILD-STATUS.md) and [RUNTIME](docs/RUNTIME.md).
 
 ## Selected direction
 

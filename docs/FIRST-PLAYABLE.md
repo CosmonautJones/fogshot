@@ -29,11 +29,11 @@ Derive actual codespace annotations and scaffold paths from the selected compile
 
 ## Task 1: Runtime integration
 
-- [ ] Inspect the installed Jac version and version-matched guide; pin compatible released Jac, Phaser, and Pymunk versions.
-- [ ] Establish tests for scene mount/dispose/remount without duplicate handlers and for a real server-side collision and rotating support collapse.
-- [ ] Prove those tests fail for the intended missing behavior, then implement direct Jac imports and callbacks.
-- [ ] Run the actual supported check/test/build commands; record them in docs/RUNTIME.md.
-- [ ] Commit and push the verified runtime slice. A native dependency failure is a blocker to report, not permission to replace the design with a mock.
+- [x] Inspect the installed Jac version and version-matched guide; pin compatible released Jac, Phaser, and Pymunk versions. Jac 0.37.23, Phaser 3.90.0, Pymunk 7.3.0. See docs/RUNTIME.md.
+- [x] Establish tests for scene mount/dispose/remount without duplicate handlers and for a real server-side collision and rotating support collapse. `tests/scene_host_tests.jac`, `tests/physics_driver_tests.jac`.
+- [x] Prove those tests fail for the intended missing behavior, then implement. Missing modules failed under `JAC_TEST_STRICT=1` with `ModuleNotFoundError`. Direct `import pymunk` does not compile (E1030 on `Body.angle.setter`); the driver loads Pymunk through a `::py::` seam and keeps break policy in Jac. `Space.on_collision` is the Pymunk 7 callback. Phaser itself is not mounted yet.
+- [x] Run the actual check and test commands; record them in docs/RUNTIME.md. `jac build` has not been run. There is no servable `main.jac` yet.
+- [ ] Commit and push the verified runtime slice. Do that only after the push command succeeds.
 
 ## Task 2: Input and pure rules
 

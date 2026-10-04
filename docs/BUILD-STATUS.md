@@ -2,30 +2,36 @@
 
 Recorded: 2026-10-04
 
-## Actual completed work
+## Repository
 
-Repository bootstrap only: original game concept, Jac-first ADR, first-playable task plan, agent instructions, public-data safeguards, and small local Git commits. No application source or gameplay tests are included yet.
+Public repository: https://github.com/CosmonautJones/fogshot
 
-## GitHub status at bootstrap
+Visibility: public. Default branch: `main`. Bootstrap commit `3d445ed3e2c8e61e22ddfa8891b5cae44773bce1` is on `origin/main` (`git ls-remote` at task start matched that SHA as HEAD). The bootstrap note that said the GitHub repository had not been created is stale.
 
-Requested destination: `CosmonautJones/fogshot`, public.
+Gameplay work is on branch `cursor/first-playable-66d6`. This file is updated when a slice is verified. A local commit is not remote progress until its push succeeds.
 
-The connected GitHub identity was verified. Lookup of the requested repository returned HTTP 404; that means it could not be accessed through this connection, not proof of its global absence. The available GitHub connector exposes commits/files/branches but no create-repository action. The authorized desktop connection was offline, and this execution container had no GitHub CLI. No GitHub repository was created, no remote was configured, and no push succeeded in preparing this bootstrap.
+## What runs
 
-Do not replace these observations with a claim that the public repository exists. Once an authorized creation route is available, create or resolve the actual repository, verify public visibility and write access, publish the bootstrap, and update this record with the verified URL and remote SHA.
+Jac 0.37.23, Pymunk 7.3.0, and the Jac handler lifecycle in `client/scene_host.jac`.
 
-## Product status
+`JAC_TEST_STRICT=1 jac test tests/physics_driver_tests.jac tests/scene_host_tests.jac -v` → `3 passed in 1.05s`.
 
-- Runtime integration: not started; no Jac compiler or Pymunk installation was available in this container.
-- Gameplay code: not implemented.
-- Automated gameplay tests/build: not run.
-- Multiplayer/physics/privacy/recovery: untested.
-- JacHammer deployment: not attempted.
+- A projectile contacts a thin (0.12 m) support inside a 900-step Pymunk run.
+- A leaning post held by a pin stays near its brace angle for 30 steps. After a projectile hit drops its health through zero, Jac removes the pin and the post rotates and falls under Pymunk.
+- `SceneHost.mount` is idempotent: dispose then mount leaves three pointer handler names, not six.
 
-## Repository checks
+Details, the Pymunk `::py::` import seam, and the commands are in [RUNTIME.md](RUNTIME.md).
 
-For this documentation-only bootstrap: inspect tracked files for accidental private data, run `git diff --check`, check repository object integrity, create a full-history bundle, and restore that bundle into a separate temporary directory to compare HEAD and tracked content. Report these as repository checks, never as gameplay tests.
+## Limitations
+
+- No playable page. There is no `main.jac` yet, so `jac run` cannot serve Fogshot.
+- Phaser 3.90.0 is installed and pinned. Nothing has opened it in a browser.
+- The scene test counts handler names. It does not create or destroy a Phaser game.
+- Direct `import pymunk` does not compile on Jac 0.37.23 (E1030 on `Body.angle.setter`). The solver is still Pymunk, loaded through `_pymunk()`.
+- No match, fog, reveal, privacy projection, supply graph, or two-client session has been implemented or tested.
+- JacHammer deployment has not been attempted.
+- `jac check` on the driver warns `W1037` for explicit `any` at the solver boundary.
 
 ## Next task
 
-Unblock authorized public repository creation/publication; then execute the runtime integration gate in docs/FIRST-PLAYABLE.md. Keep subsequent work in a feature branch and commit/push each verified coherent slice.
+Pure aim conversion and shot-command validation: drag cancel, duplicate pointer events, resize and device-pixel ratio, mirrored aim, finite inputs, wrong phase/turn/actor, and victory/draw. Write the failing behavior tests first.
