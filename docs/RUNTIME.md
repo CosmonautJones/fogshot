@@ -94,7 +94,7 @@ JAC_TEST_STRICT=1 jac test tests/supply_tests.jac -v
 
 Result: `6 passed in 0.80s`. Red run: `ModuleNotFoundError: No module named 'graph'`.
 
-The walk uses `Site` nodes and `Cable` edges. It does not attach them to `root`. A physical break does not yet flip `intact`.
+The walk uses `Site` nodes and `Cable` edges. It does not attach them to `root`. Breaking B's braced post sets that mast's `intact` flag false.
 
 ## Browser boot
 
@@ -116,6 +116,6 @@ Two Playwright contexts joined invite `fogshot`. The second context's response b
 
 - JacHammer has not been deployed. This environment has no JacHammer credentials or remote application target.
 - The browser shell is the canvas shot (about angle 0, power 5, post at x=21, health 0.5). It is not the siege fixture's 0.15 / power-14 shot.
-- Restarting `jac run` does not restore Pymunk poses. The journal still stores turn, revision, and shot count.
+- Restarting `jac run` replays committed journal shots into a new physics world. The journal stores the shot payload, not a pose snapshot. An uncommitted pending file is dropped.
 - An unauthenticated HTTP 401 was not captured.
 - Scene-host coverage is the handler set in Jac. The browser path destroys `Phaser.Game` in the effect cleanup.

@@ -69,7 +69,7 @@ Derive actual codespace annotations and scaffold paths from the selected compile
 
 ## Task 6: Playable client
 
-- [x] Two browser contexts with separate sessions joined one match. Both flares and the shell were pulled on the page. The shell collapsed the braced post, the reveal opened, then the reveal closed. The same two-browser run now ends the match when B's core dies and restores it with Rematch. Draw remains the unit test in `tests/aim_rules_tests.jac`. Refresh-after-restart still does not restore a fallen post. Evidence is in [BUILD-STATUS.md](BUILD-STATUS.md).
+- [x] Two browser contexts with separate sessions joined one match. Both flares and the shell were pulled on the page. The shell collapsed the braced post, the reveal opened, then the reveal closed. The same two-browser run now ends the match when B's core dies and restores it with Rematch. Draw remains the unit test in `tests/aim_rules_tests.jac`. A process restart replays the journal, and a refreshed page reclaims its seat. Evidence is in [BUILD-STATUS.md](BUILD-STATUS.md).
 - [x] Jac scene orchestration and Phaser presentation. The caption reports seat, phase, and weapon. Shapes are original rectangles and a circle. Reduced shake was not added.
 - [x] The drawn projectile is the server path. `client/mount_field.js` does not clamp that path to the fog edge and does not decide the hit.
 - [x] Two-client evidence is in [BUILD-STATUS.md](BUILD-STATUS.md). The second context's response bodies omit `12345.67`, `-9876.54`, and `87654.32`.

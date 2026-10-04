@@ -69,7 +69,7 @@ Details, the Pymunk `::py::` import seam, and the commands are in [RUNTIME.md](R
 ## Limitations
 
 - `jac run` serves `http://localhost:8000/`. A browser pull submits to the one in-process match and the gold dot follows that Pymunk path, including past the fog edge. A hitting shell collapses the braced post during a temporary reveal, then the reveal closes. A second browser joins the same match.
-- The shared match is one process-wide object plus `runtime-data/browser-match`. Restarting `jac run` builds a fresh physics world. The journal still stores turn, revision, and shot count, not Pymunk poses, so a restart does not restore a fallen post.
+- The shared match is one process-wide object plus `runtime-data/browser-match`. A later boot replays committed journal shots into a fresh physics world, so the fallen post, dark supply, and dead core come back. An uncommitted `pending.json` is still dropped. Replay is this process reading its own journal, not a claim that another machine produces the same bytes.
 - The scene-host test still counts handler names. The browser mount registers `pointerdown`, `pointermove`, and `pointerup` once and destroys the Phaser game on effect cleanup.
 - Direct `import pymunk` does not compile on Jac 0.37.23 (E1030 on `Body.angle.setter`). The solver is still Pymunk, loaded through `_pymunk()`.
 - The measured 0.15 / power-14 shell from launcher A lands at the midline. A post at x=24 is past that landing, so the siege fixture places the target at x=20. The browser pull is a different shot: pointer `(20, 300)` on an 800 by 400 canvas is about angle 0 at power 5, against a post at x=21 with health 0.5.
@@ -170,6 +170,55 @@ Screenshots: `/opt/cursor/artifacts/fogshot-supply-dark.png` (B's dark lamp whil
 
 The field dataset can keep the last seen `data-broken` and `data-post-angle` after rematch. Phase, the lamp, the core flags, and the server view are what reset. One core per side is this miniature match, not the four-objective economy.
 
+## QA passes
+
+Independent reads of the projection and of boot, then new Jac tests, then two browser passes.
+
+First `tests/qa_match_tests.jac` run, before the fixes:
+
+```text
+JAC_TEST_STRICT=1 jac test tests/qa_match_tests.jac -v
+```
+
+Result: `3 failed in 1.84s`.
+
+- Duplicate command id through `take_shot` returned `conflict` because the retry was stamped with the new revision. The shot was not simulated twice, but the retry was not the stored command.
+- Restart let `player-c` claim seat A. `boot_match` called `open_table`, which overwrote `seats.json` and ignored `journal.jsonl`, then `_arm` built a standing post.
+- The miss assertion also failed at `now_ms` 3000 because seat A's flare reveal was still open. The path itself peaked at x `9.35` and did not hit the post. The test clock was moved to 8000. That was a test bug, not a second physics bug.
+
+After the journal replay, idempotent command id, and corrected miss clock:
+
+```text
+JAC_TEST_STRICT=1 jac test tests/qa_match_tests.jac -v
+```
+
+Result: `3 passed in 3.19s`.
+
+Full suite:
+
+```text
+JAC_TEST_STRICT=1 jac test tests/physics_driver_tests.jac tests/scene_host_tests.jac tests/aim_rules_tests.jac tests/siege_view_tests.jac tests/authority_tests.jac tests/supply_tests.jac tests/live_match_tests.jac tests/outcome_tests.jac tests/qa_match_tests.jac -v
+```
+
+Result: `36 passed in 1.38s`.
+
+The QA file covers a wrong-seat shot (`actor`), an empty player (`unauthenticated`, no `core-a` or `4.25`), a shell during recon and a flare during combat (`weapon`), a stale revision (`revision`), a repeated command id (ok, empty path, no second shot), a different aim on that id (`conflict`), a miss at pointer `(100, 390)` with a path and no enemy post in the payload, restart restoring both seats plus the dark supply and the dead core, and rematch restoring both seats before a later boot returns to recon.
+
+Browser pass against `jac run` at `http://localhost:8000/`, two contexts plus a third that arrived after the seats were taken. Phaser layout was not changed.
+
+- The third page caption included `(full)` and its seat stayed empty.
+- Seat B pulled during recon. The caption included `(actor)`. Phase stayed `recon`. Seat A then flared successfully.
+- After both flares, A's miss released near `(100, 390)`. `data-shot-max-x` was `9.34`, `data-authoritative` was `pymunk`, `data-broken` stayed `false`, and `data-reveal` was `closed`. Supply stayed on.
+- A's later shell near `(20, 308)` left B with `data-powered=false`, `data-shot-ready=true`, `data-phase=combat`, and `data-post-angle=1.347`.
+- That pass captured 74 HTTP bodies for context B. None contained `12345.67`, `-9876.54`, `87654.32`, `core-a`, or `4.25`. Page errors: none.
+- `jac run` was stopped and started again without deleting `runtime-data/browser-match`. The same two emails joined again. B was still seat B, supply dark, shell ready, post angle `1.3466442000713896`. Refreshing A's page kept seat A.
+- B fired, A's lob near `(10, 390)` set both pages to result A, and B's `data-own-core` became `false`. Rematch returned both seats to `recon` with supply on and `data-broken=false`.
+- The resume pass captured 38 more B bodies. The same five strings were absent. Page errors: none.
+
+Screenshots: `/opt/cursor/artifacts/fogshot-qa-supply-dark.png` and `/opt/cursor/artifacts/fogshot-qa-result-a.png`.
+
+An unseated full page reports supply dark because it has no seat. That caption is the `(full)` code plus an empty seat, not B's lamp. Draw was not played in the browser. No HTTP 401 was captured. JacHammer was not deployed.
+
 ## Remote
 
 `git push -u origin cursor/first-playable-66d6` updated `origin/cursor/first-playable-66d6`. These commits are on that remote branch:
@@ -181,7 +230,10 @@ The field dataset can keep the last seen `data-broken` and `data-post-angle` aft
 - `397252ddc70e4e82ef29123a591f69c864df1301` shows the own-side supply lamp and the rematch control.
 - `13c257d3478090cf7fe0941b66828b727549f6f5` seats the live brace lower so a flat shell cannot slip under it.
 - `8d41943be40beb667393356f74a86a22677a5a18` records this core, supply, and rematch evidence.
+- `30337d40be0ee84840926cc9de221dfaa60da79f` names that evidence commit.
+- `30c236c3eb5bb788bd8130ad5d9c58cf4ccbdc27` restores a restarted match from the journal and ignores a repeated command.
+- `b0c8b95ddd7995175af9283dea461aa141281176` lets a refreshed browser reclaim its seat.
 
 ## Next task
 
-Capture an unauthenticated `POST /function/join_seat` and record the HTTP 401. Persist the Pymunk pose in the pre-shot checkpoint so a restart restores the fallen post. JacHammer stays unattempted until a real remote target and credentials exist.
+Capture an unauthenticated `POST /function/join_seat` and record the HTTP 401. JacHammer stays unattempted until a real remote target and credentials exist.

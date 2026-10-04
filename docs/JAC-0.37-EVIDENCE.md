@@ -204,8 +204,7 @@ A later two-context run broke that post as B's supply mast. B's lamp went dark w
 ## Not proven
 
 - No `def:protect` HTTP 401 was captured.
-- A process restart does not restore the fallen post. The journal stores
-  turn, revision, and shot count, not Pymunk poses.
+- A process restart replays committed journal shots, so the fallen post and the result come back on this machine. That is not a cross-device deterministic replay. An uncommitted pending file is still dropped.
 - JacHammer was not deployed. No credentials or remote application target
   were available. Do not treat `jac run` on localhost as a deployment.
 - Outcomes from one process are not a cross-device deterministic replay.
