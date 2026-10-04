@@ -180,6 +180,7 @@ The field dataset can keep the last seen `data-broken` and `data-post-angle` aft
 - `2811e0b6396e77fb6d2a392317d2e0ff6b841eee` lets a broken supply stay playable and a dead core end the match.
 - `397252ddc70e4e82ef29123a591f69c864df1301` shows the own-side supply lamp and the rematch control.
 - `13c257d3478090cf7fe0941b66828b727549f6f5` seats the live brace lower so a flat shell cannot slip under it.
+- `8d41943be40beb667393356f74a86a22677a5a18` records this core, supply, and rematch evidence.
 
 ## Next task
 
