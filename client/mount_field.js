@@ -120,7 +120,10 @@ function remember(parent, data) {
     parent.dataset.enemyCores = data.enemy_cores === undefined ? "" : String(data.enemy_cores);
     parent.dataset.ownCore = data.own_core === false ? "false" : "true";
     const seeing = Boolean(data.view && data.view.reveal) || Boolean(data.broken);
-    if (seeing && typeof data.angle === "number") {
+    if (data.phase === "recon") {
+        parent.dataset.broken = "false";
+        parent.dataset.postAngle = typeof data.angle === "number" ? String(data.angle) : "0";
+    } else if (seeing && typeof data.angle === "number") {
         parent.dataset.postAngle = String(data.angle);
         parent.dataset.broken = data.broken ? "true" : "false";
     }

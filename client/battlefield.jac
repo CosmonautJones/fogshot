@@ -15,9 +15,22 @@ glob _joining: bool = False;
 glob _email_ready: str = "";
 
 def _email() -> str {
-    if _email_ready == "" {
-        token = (crypto as any).randomUUID() as str;
-        _email_ready = "fog-" + token + "@example.com";
+    if _email_ready != "" {
+        return _email_ready;
+    }
+    store = (window as any).sessionStorage;
+    saved = "";
+    if store {
+        saved = str(store.getItem("fogshot-email") or "");
+    }
+    if saved != "" and saved != "None" {
+        _email_ready = saved;
+        return _email_ready;
+    }
+    token = (crypto as any).randomUUID() as str;
+    _email_ready = "fog-" + token + "@example.com";
+    if store {
+        store.setItem("fogshot-email", _email_ready);
     }
     return _email_ready;
 }
@@ -73,13 +86,6 @@ async def _join() -> None {
     login_ok: bool = False;
     joined: str = "";
     signup_result = await jacSignup(email, PASSWORD);
-    if not signup_result.success {
-        _joining = False;
-        if _set_caption {
-            _set_caption.call(None, "Signup failed.");
-        }
-        return;
-    }
     login_ok = await jacLogin(email, PASSWORD);
     if not login_ok {
         _joining = False;
