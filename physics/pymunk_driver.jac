@@ -40,6 +40,18 @@ def _drop(space, body, shape, pin):
     if pin is not None:
         space.remove(pin)
     space.remove(body, shape)
+
+def _static_box(space, body_id, x, y, w, h):
+    import pymunk
+    body = pymunk.Body(body_type=pymunk.Body.STATIC)
+    body.position = (float(x), float(y))
+    shape = pymunk.Poly.create_box(body, (float(w), float(h)))
+    shape.friction = 0.3
+    shape.elasticity = 0.0
+    shape.collision_type = 2
+    shape.fog_id = body_id
+    space.add(body, shape)
+    return (body, shape)
 ::py::
 
 obj BodyState {
@@ -176,6 +188,19 @@ obj PhysicsWorld {
         ));
     }
 
+    def add_static_box(body_id: str, x: float, y: float, w: float, h: float, health: float) -> None {
+        self.ensure();
+        made = _static_box(self.space, body_id, x, y, w, h) as tuple[any, any];
+        self.tracks.append(Tracked(
+            id=body_id,
+            role="core",
+            body=made[0],
+            shape=made[1],
+            health=health,
+            kind="static"
+        ));
+    }
+
     def add_projectile(body_id: str, x: float, y: float, vx: float, vy: float, radius: float) -> None {
         self.ensure();
         mass = 0.45;
@@ -284,6 +309,9 @@ obj PhysicsWorld {
             if track.pin is not None {
                 self.space.remove(track.pin);
                 track.pin = None;
+            }
+            if track.role == "core" {
+                self.space.remove(track.shape);
             }
             track.broken = True;
         }
