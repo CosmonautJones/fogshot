@@ -7,8 +7,24 @@ import from game.aim { launcher_for, release_pull }
 import from game.rules { MatchRules, resolve_cores }
 import from graph.supply { Cable, Site, assess }
 import from physics.pymunk_driver { PhysicsWorld, SimOutcome }
-import from server.authority { ClaimResult, Table, claim, open_table, submit }
+import from server.authority { ClaimResult, Table, claim, reload_table, submit }
 import from server.views { SecretBody, project_view }
+
+::py::
+def _same_shot(payload, seat, weapon, angle, power):
+    parts = str(payload).split("|")
+    if len(parts) < 6:
+        return False
+    if parts[0] != seat or parts[3] != weapon:
+        return False
+    return abs(float(parts[4]) - float(angle)) < 1e-9 and abs(float(parts[5]) - float(power)) < 1e-9
+
+def _shot_parts(payload):
+    parts = str(payload).split("|")
+    if len(parts) < 6:
+        return ("", "", 0.0, 0.0, False)
+    return (parts[0], parts[3], float(parts[4]), float(parts[5]), True)
+::py::
 
 obj LiveMatch {
     has table: Table;
@@ -92,7 +108,8 @@ def _arm(live: LiveMatch) -> None {
 }
 
 def boot_match(directory: str) -> LiveMatch {
-    table = open_table("fogshot", directory);
+    Path(directory).mkdir(parents=True, exist_ok=True);
+    table = reload_table("fogshot", directory);
     live = LiveMatch(table=table, world=PhysicsWorld());
     side_a = _chain("A", "launcher-a", "mast-a", "core-a");
     side_b = _chain("B", "launcher-b", "mast-b", "core-b");
@@ -103,6 +120,7 @@ def boot_match(directory: str) -> LiveMatch {
     live.mast_b = side_b[1];
     live.core_node_b = side_b[2];
     _arm(live);
+    _replay(live);
     return live;
 }
 
@@ -292,6 +310,54 @@ def watch(live: LiveMatch, player_id: str, now_ms: int) -> str {
     return _encode(live, player_id, now_ms, True, "", weapon, [], broken, angle);
 }
 
+def _launch(
+    live: LiveMatch,
+    seat: str,
+    weapon: str,
+    angle: float,
+    power: float,
+    now_ms: int,
+    reveal: bool
+) -> None {
+    live.world.drop_projectiles();
+    live.world.deal_damage = weapon == "shell";
+    origin = launcher_for(seat);
+    live.world.add_projectile(
+        "shot",
+        origin[0],
+        origin[1],
+        power * math.cos(angle),
+        power * math.sin(angle),
+        0.16
+    );
+    outcome = live.world.simulate(max_steps=1400);
+    _apply_hit(live, outcome, weapon);
+    if reveal {
+        _reveal_on(live, outcome, seat, now_ms);
+    }
+}
+
+def _replay(live: LiveMatch) -> None {
+    for payload in live.table.payloads {
+        parsed = _shot_parts(payload) as tuple[str, str, float, float, bool];
+        if not parsed[4] {
+            continue;
+        }
+        _launch(live, parsed[0], parsed[1], parsed[2], parsed[3], 0, False);
+    }
+}
+
+def _stored(live: LiveMatch, command_id: str) -> int {
+    index = 0;
+    for item in live.table.commits {
+        if item == command_id {
+            return index;
+        }
+        index = index + 1;
+    }
+    return -1;
+}
+
 def take_shot(
     live: LiveMatch,
     player_id: str,
@@ -312,6 +378,14 @@ def take_shot(
         return _encode(live, player_id, now_ms, False, aim.reason, "", [], False, 0.0);
     }
     weapon = "flare" if live.table.rules.phase == "recon" else "shell";
+    stored = _stored(live, command_id);
+    if stored >= 0 {
+        same = _same_shot(live.table.payloads[stored], seat, weapon, aim.angle, aim.power) as bool;
+        if same {
+            return watch(live, player_id, now_ms);
+        }
+        return _encode(live, player_id, now_ms, False, "conflict", weapon, [], False, 0.0);
+    }
     before = live.table.shots;
     decision = submit(
         live.table,
@@ -331,20 +405,7 @@ def take_shot(
     if decision.shots == before {
         return watch(live, player_id, now_ms);
     }
-    live.world.drop_projectiles();
-    live.world.deal_damage = weapon == "shell";
-    origin = launcher_for(seat);
-    live.world.add_projectile(
-        "shot",
-        origin[0],
-        origin[1],
-        aim.power * math.cos(aim.angle),
-        aim.power * math.sin(aim.angle),
-        0.16
-    );
-    outcome = live.world.simulate(max_steps=1400);
-    _apply_hit(live, outcome, weapon);
-    _reveal_on(live, outcome, seat, now_ms);
+    _launch(live, seat, weapon, aim.angle, aim.power, now_ms, True);
     broken = False;
     angle = 0.0;
     post = live.world.find("enemy-post");
@@ -409,7 +470,10 @@ def:protect join_seat(invite: str) -> str {
     }
     player = str(jid(root));
     live = shared_match();
-    claim(live.table, player, invite);
+    claimed = claim(live.table, player, invite);
+    if not claimed.ok {
+        return _encode(live, player, 0, False, claimed.code, "", [], False, 0.0);
+    }
     return watch(live, player, 0);
 }
 
