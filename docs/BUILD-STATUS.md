@@ -65,10 +65,21 @@ Details, the Pymunk `::py::` import seam, and the commands are in [RUNTIME.md](R
 - The measured 0.15 / power-14 shell from launcher A lands at the midline. A post at x=24 is past that landing, so the siege fixture places the target at x=20. This is not a claim that every legal aim reaches the far base.
 - The view test serializes the projection object. It does not yet inspect HTTP replay, error, polling, or reconnect bytes.
 - The match journal stores seats, rules, and a shot count. It does not yet store a Pymunk body snapshot, and it does not serve `def:protect` over HTTP.
-- No supply graph or two-client session has been implemented or tested.
+- Supply reachability is tested on nodes that are not attached to `root`. It is not yet wired to a physical break or a powered indicator on the page.
+- No two-client browser session has been implemented or tested.
 - JacHammer deployment has not been attempted.
 - `jac check` on the driver warns `W1037` for explicit `any` at the solver boundary.
 - Outcomes are the in-memory `SimOutcome` from one process. That is not a cross-device deterministic replay.
+
+## Supply
+
+```text
+JAC_TEST_STRICT=1 jac test tests/supply_tests.jac -v
+```
+
+Result: `6 passed in 0.80s`. The red run was `ModuleNotFoundError: No module named 'graph'`.
+
+`PowerWalk` follows intact `Cable` edges. A broken relay blocks the only route. An intact alternate still powers the objective. A two-node cycle returns. A separated objective stays a target, and `shot_ready` stays true. Another owner's nodes are neither powered nor targets. `sentinel-supply` is not in `[root -->[?:Site]]`.
 
 ## Next task
 

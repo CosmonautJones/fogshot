@@ -65,7 +65,7 @@ Derive actual codespace annotations and scaffold paths from the selected compile
 - [x] Implement one verified per-match authority boundary. Do not claim a process lock supports multiple workers. `server/authority.jac`.
 - [x] Persist accepted-command journal and pre-shot checkpoint; commit one outcome and next turn consistently. `journal.jsonl` is the commit. `pending.json` is the checkpoint and is deleted on reload when no commit line exists. The checkpoint stores turn, revision, and shot count, not Pymunk poses.
 - [x] Test restart before and after outcome commit. Retrying must not create another shot or advance an extra turn.
-- [ ] Verify, commit, and push.
+- [x] Verify, commit, and push. `d223c1c9ceb19997c88d44c5354ffd55a2c76688` on `origin/cursor/first-playable-66d6`. HTTP 401 remains open, as the unauthenticated case in that commit is an empty player id.
 
 ## Task 6: Playable client
 
@@ -76,9 +76,9 @@ Derive actual codespace annotations and scaffold paths from the selected compile
 
 ## Task 7: Supply graph
 
-- [ ] Test intact chain, broken only route, alternate path, cyclic graph, separated endpoints, and ownership isolation.
-- [ ] Use real Jac nodes/edges/traversal to update the powered indicator after physical breaks. Rubble does not conduct.
-- [ ] A disconnected objective remains a target, and the basic shot remains available.
+- [x] Test intact chain, broken only route, alternate path, cyclic graph, separated endpoints, and ownership isolation. `tests/supply_tests.jac`.
+- [x] Use real Jac nodes/edges/traversal to update the powered indicator after physical breaks. Rubble does not conduct. `graph/supply.jac` uses `Site`, `Cable`, and `PowerWalk`. The walk is not yet triggered by a Pymunk break, so the page has no powered lamp.
+- [x] A disconnected objective remains a target, and the basic shot remains available. `shot_ready` is true in each of those cases.
 - [ ] Verify, commit, and push.
 
 ## Task 8: Hosting and measured report
