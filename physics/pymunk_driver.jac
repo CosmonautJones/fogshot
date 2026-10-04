@@ -49,6 +49,12 @@ def _hits_structure(arbiter):
             return True
     return False
 
+def _hits_projectile(arbiter):
+    for shape in arbiter.shapes:
+        if int(shape.collision_type) == 3:
+            return True
+    return False
+
 def _drop(space, body, shape, pin):
     if pin is not None:
         space.remove(pin)
@@ -137,6 +143,7 @@ obj PhysicsWorld {
     has deal_damage: bool = True;
     has trace: list[float] = [];
     has collapse: list[float] = [];
+    has collapse_names: list[str] = [];
     has impact_x: float = 0.0;
     has impact_y: float = 0.0;
     has impact_step: int = -1;
@@ -158,8 +165,10 @@ obj PhysicsWorld {
         self.pending = [];
         self.space.on_collision(3, 2, post_solve=_post_solve, data={"world": self});
         self.space.on_collision(3, 1, post_solve=_post_solve, data={"world": self});
+        self.space.on_collision(2, 2, post_solve=_post_solve, data={"world": self});
         self.trace = [];
         self.collapse = [];
+        self.collapse_names = [];
     }
 
     def drop_projectiles() -> None {
@@ -196,6 +205,7 @@ obj PhysicsWorld {
         for track in self.tracks {
             if track.role == "post" {
                 pose = _pose(track.body) as tuple[float, float, float];
+                self.collapse_names.append(track.id);
                 self.collapse.append(pose[2]);
                 self.collapse.append(elapsed);
             }
@@ -229,6 +239,19 @@ obj PhysicsWorld {
             body=body,
             shape=shape,
             health=health
+        ));
+    }
+
+    def add_fixture(body_id: str, x: float, y: float, w: float, h: float, health: float, role: str) -> None {
+        self.ensure();
+        made = _static_box(self.space, body_id, x, y, w, h) as tuple[any, any];
+        self.tracks.append(Tracked(
+            id=body_id,
+            role=role,
+            body=made[0],
+            shape=made[1],
+            health=health,
+            kind="static"
         ));
     }
 
@@ -305,12 +328,25 @@ obj PhysicsWorld {
         ));
     }
 
+    def _falling(self_a: str, self_b: str) -> bool {
+        left = self.find(self_a);
+        right = self.find(self_b);
+        if left is not None and left.broken {
+            return True;
+        }
+        if right is not None and right.broken {
+            return True;
+        }
+        return False;
+    }
+
     def note(arbiter: any) -> None {
         shapes = arbiter.shapes;
         a = str(shapes[0].fog_id);
         b = str(shapes[1].fog_id);
         key = a + "|" + b if a < b else b + "|" + a;
-        if self.impact_step < 0 or self.strike_step < 0 {
+        projectile = _hits_projectile(arbiter) as bool;
+        if projectile and (self.impact_step < 0 or self.strike_step < 0) {
             point = _contact_point(arbiter) as tuple[float, float, bool];
             if point[2] and self.impact_step < 0 {
                 self.impact_x = point[0];
@@ -329,7 +365,13 @@ obj PhysicsWorld {
         if key in self.damaged {
             return;
         }
+        if not projectile and not self._falling(a, b) {
+            return;
+        }
         mag = _impulse(arbiter) as float;
+        if not projectile and mag < 0.05 {
+            return;
+        }
         self.damaged.append(key);
         self.pending.append((a, b, mag));
     }
@@ -468,6 +510,7 @@ obj PhysicsWorld {
         self.pending = [];
         self.trace = [];
         self.collapse = [];
+        self.collapse_names = [];
         self.impact_step = -1;
         self.impact_x = 0.0;
         self.impact_y = 0.0;

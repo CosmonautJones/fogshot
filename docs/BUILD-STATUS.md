@@ -277,7 +277,23 @@ The Vite proxy at `http://127.0.0.1:8000/function/join_seat` returned the same s
 
 ## Next task
 
-The next stabilization slice is two reachable outposts with breakable supports, one crush contact, and one modest supply perk. Basic shots stay free. JacHammer, the shared password, and room isolation stay unattempted. One `jac run` process is the supported worker model. Do not treat localhost as a deploy.
+The next tasks are the shared-password replacement, separate rooms, a repeatable CI check, and a JacHammer proof. None of those were started. This environment has no JacHammer credentials or remote application target. One `jac run` process is the supported worker model. Do not treat localhost as a deploy. Basic shots stay free. The four-objective economy is still the later milestone.
+
+## Two outposts
+
+Red run of `tests/outpost_tests.jac`: `1 failed, 1 error in 1.96s`. The shell reveal radius was not `2.6`, and the payload had no `perk`. After the supports existed, the full suite still had 3 failures: the two miss tests expected radius `2.2` while the shooter was connected, and the playback collapse mixed the standing post into the falling post's samples.
+
+A connected shell now scouts at radius 2.6. A disconnected shell stays at 2.2. Flares stay at 3.0 and do not damage. `perk` is `scout` while that seat's supply reaches its core, and empty when it does not. `shot_ready` stays true either way.
+
+B's valley post remains at x=21 and still falls to A's flat shell. A's mast is `post-a` at x=26, on B's approach, so B's flat shell at pointer `(20, 300)` breaks it and A's shell, which stops on the valley post, does not. A static spur at `(18.45, 1.55)` is crushed once by the falling valley post. The shell's pair list does not include that spur. Intact structure contact does not drain health. An extra intact cable keeps B powered after the valley post falls.
+
+Green:
+
+```text
+JAC_TEST_STRICT=1 jac test tests/physics_driver_tests.jac tests/scene_host_tests.jac tests/aim_rules_tests.jac tests/siege_view_tests.jac tests/authority_tests.jac tests/supply_tests.jac tests/live_match_tests.jac tests/outcome_tests.jac tests/qa_match_tests.jac tests/clock_authority_tests.jac tests/command_envelope_tests.jac tests/transaction_tests.jac tests/impact_reveal_tests.jac tests/playback_tests.jac tests/outpost_tests.jac -v
+```
+
+Result: `48 passed in 4.20s`.
 
 ## Shot playback
 

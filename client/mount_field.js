@@ -31,7 +31,7 @@ function revealedBodies(view) {
     return view.reveal.bodies;
 }
 
-function drawBodies(pen, bodies, color, collapseAngle) {
+function drawBodies(pen, bodies, color, collapseAngle, collapseId) {
     for (const body of bodies) {
         if (body.role === "ground" || body.role === "marker" || body.role === "launcher") {
             continue;
@@ -40,7 +40,8 @@ function drawBodies(pen, bodies, color, collapseAngle) {
         if (center.x < -40 || center.x > VIEW_W + 40) {
             continue;
         }
-        const angle = body.role === "post" && typeof collapseAngle === "number" ? collapseAngle : body.angle;
+        const falling = body.role === "post" && collapseId && body.id === collapseId && typeof collapseAngle === "number";
+        const angle = falling ? collapseAngle : body.angle;
         pen.save();
         pen.translateCanvas(center.x, center.y);
         pen.rotateCanvas(-angle);
@@ -93,8 +94,8 @@ function paint(scene, pull) {
     } else {
         pen.fillRect(VIEW_W / 2, 0, VIEW_W / 2, VIEW_H);
     }
-    drawBodies(pen, ownBodies(scene.view), 0xc4a574, scene.collapseAngle);
-    drawBodies(pen, revealedBodies(scene.view), 0xd27a5a, scene.collapseAngle);
+    drawBodies(pen, ownBodies(scene.view), 0xc4a574, scene.collapseAngle, scene.collapseId);
+    drawBodies(pen, revealedBodies(scene.view), 0xd27a5a, scene.collapseAngle, scene.collapseId);
     drawLamp(pen, scene);
     const launch = launcherOf(scene);
     scene.launch = launch;
@@ -172,6 +173,7 @@ export function mountField(parent) {
                 this.pathStart = null;
                 this.collapse = null;
                 this.collapseAngle = null;
+                this.collapseId = "";
                 this.epoch = 0;
                 this.revision = 0;
                 this.input.addPointer(2);
@@ -294,6 +296,7 @@ export function mountField(parent) {
                 sceneRef.path = null;
                 sceneRef.collapse = null;
                 sceneRef.collapseAngle = null;
+                sceneRef.collapseId = "";
                 sceneRef.shot = null;
                 sceneRef.pathStart = null;
             }
@@ -315,6 +318,7 @@ export function mountField(parent) {
             }
             if (data.collapse && data.collapse.length && !sameSeries(sceneRef.collapse, data.collapse)) {
                 sceneRef.collapse = data.collapse;
+                sceneRef.collapseId = data.collapse_id || "";
                 sceneRef.collapseAngle = data.collapse[0][0];
             }
             remember(parent, data);

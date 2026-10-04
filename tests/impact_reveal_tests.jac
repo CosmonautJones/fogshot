@@ -39,7 +39,7 @@ test "a shell miss and a flare both reveal the first impact" {
     assert missed["weapon"] == "shell";
     assert not missed["broken"];
     assert missed["view"]["reveal"] is not None;
-    assert missed["reveal_radius"] == 2.2;
+    assert missed["reveal_radius"] == 2.6;
     assert missed["reveal_x"] > 5.0;
     assert missed["reveal_x"] < 12.0;
     assert "core-b" not in json.dumps(missed);

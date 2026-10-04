@@ -73,6 +73,7 @@ obj LiveMatch {
     has refused: bool = False;
     has shot_path: list[list[float]] = [];
     has shot_collapse: list[list[float]] = [];
+    has shot_collapse_id: str = "";
 }
 
 glob _shared: LiveMatch | None = None;
@@ -96,6 +97,10 @@ def _arm(live: LiveMatch) -> None {
     # Clearance 0.22 keeps a flat shell on the post. The 0.35 siege pivot
     # lets a fraction of a degree slip underneath that thin brace.
     world.add_braced_post("enemy-post", 21.0, 0.0, 0.14, 3.2, 0.22, 0.5, 0.22);
+    # A's mast sits on B's approach, past the valley post, so B's flat shell can
+    # reach it and A's shell, which stops on the valley post, does not.
+    world.add_braced_post("post-a", 26.0, 0.0, 0.16, 2.0, -0.15, 0.5, 0.22);
+    world.add_fixture("spur-b", 18.45, 1.55, 0.5, 0.45, 0.05, "spur");
     world.add_static_box("core-b", 11.2, 2.6, 0.8, 0.8, 0.4);
     world.add_static_box("core-a", 4.25, 3.25, 0.8, 0.8, 0.4);
     live.world = world;
@@ -125,6 +130,14 @@ def _arm(live: LiveMatch) -> None {
         SecretBody(
             id="enemy-post", owner="B", x=21.0, y=2.0, w=0.14, h=3.2,
             angle=0.22, role="post", alive=True, health=0.5
+        ),
+        SecretBody(
+            id="post-a", owner="A", x=26.0, y=1.2, w=0.16, h=2.0,
+            angle=-0.15, role="post", alive=True, health=0.5
+        ),
+        SecretBody(
+            id="spur-b", owner="B", x=18.45, y=1.55, w=0.5, h=0.45,
+            angle=0.0, role="spur", alive=True, health=0.05
         ),
         SecretBody(
             id="sentinel", owner="hidden", x=12345.67, y=-9876.54, w=1.0, h=1.0,
@@ -219,6 +232,7 @@ def _save_canonical(live: LiveMatch, fail: bool) -> None {
         "mast_b": intact_b,
         "shot_path": live.shot_path,
         "shot_collapse": live.shot_collapse,
+        "shot_collapse_id": live.shot_collapse_id,
         "bodies": bodies
     });
     _replace_file(_canonical_path(live.table.directory), text, fail);
@@ -288,7 +302,9 @@ def _load_canonical(live: LiveMatch) -> bool {
     live.reveal_radius = float(data["reveal_radius"]);
     live.shot_path = [];
     live.shot_collapse = [];
+    live.shot_collapse_id = "";
     try {
+        live.shot_collapse_id = str(data["shot_collapse_id"]);
         for point in data["shot_path"] {
             live.shot_path.append([float(point[0]), float(point[1]), float(point[2])]);
         }
@@ -298,6 +314,7 @@ def _load_canonical(live: LiveMatch) -> bool {
     } except Exception {
         live.shot_path = [];
         live.shot_collapse = [];
+        live.shot_collapse_id = "";
     }
     return True;
 }
@@ -324,7 +341,7 @@ def _seat(live: LiveMatch, player_id: str) -> str {
 }
 
 def _sync_post(live: LiveMatch) -> None {
-    for body_id in ["enemy-post", "core-a", "core-b"] {
+    for body_id in ["enemy-post", "post-a", "spur-b", "core-a", "core-b"] {
         track = live.world.find(body_id);
         if track is None {
             continue;
@@ -385,6 +402,11 @@ def _apply_hit(live: LiveMatch, outcome: SimOutcome, weapon: str) -> None {
         mast = live.mast_b as Site;
         mast.intact = False;
     }
+    post_a = live.world.find("post-a");
+    if post_a is not None and post_a.broken and live.mast_a is not None {
+        mast_a = live.mast_a as Site;
+        mast_a.intact = False;
+    }
     core_a = live.world.find("core-a");
     if core_a is not None {
         live.core_a_alive = not core_a.broken;
@@ -410,7 +432,13 @@ def _reveal_on(live: LiveMatch, outcome: SimOutcome, seat: str, now_ms: int, wea
     }
     live.reveal_seat = seat;
     live.reveal_until = server_now() + 3000;
-    live.reveal_radius = 3.0 if weapon == "flare" else 2.2;
+    if weapon == "flare" {
+        live.reveal_radius = 3.0;
+    } elif _powered(live, seat) {
+        live.reveal_radius = 2.6;
+    } else {
+        live.reveal_radius = 2.2;
+    }
 }
 
 def _post_in_patch(live: LiveMatch) -> bool {
@@ -457,14 +485,55 @@ def _path_of(live: LiveMatch) -> list[list[float]] {
     return _bound(points, 80);
 }
 
-def _collapse_of(live: LiveMatch) -> list[list[float]] {
+def _series_for(live: LiveMatch, body_id: str) -> list[list[float]] {
     points: list[list[float]] = [];
     index = 0;
+    name_at = 0;
     while index + 1 < len(live.world.collapse) {
-        points.append([live.world.collapse[index], live.world.collapse[index + 1]]);
+        name = "";
+        if name_at < len(live.world.collapse_names) {
+            name = live.world.collapse_names[name_at];
+        }
+        if name == body_id {
+            points.append([live.world.collapse[index], live.world.collapse[index + 1]]);
+        }
         index = index + 2;
+        name_at = name_at + 1;
     }
     return _bound(points, 80);
+}
+
+def _travel(points: list[list[float]]) -> float {
+    if len(points) < 2 {
+        return 0.0;
+    }
+    last = len(points) - 1;
+    return abs(points[last][0] - points[0][0]);
+}
+
+def _choose_collapse(live: LiveMatch) -> None {
+    enemy = _series_for(live, "enemy-post");
+    home = _series_for(live, "post-a");
+    if _travel(home) > _travel(enemy) {
+        live.shot_collapse = home;
+        live.shot_collapse_id = "post-a";
+    } else {
+        live.shot_collapse = enemy;
+        live.shot_collapse_id = "enemy-post";
+    }
+}
+
+def _body_in_patch(live: LiveMatch, body_id: str) -> bool {
+    limit = live.reveal_radius * live.reveal_radius + 0.0000001;
+    for body in live.table.secrets {
+        if body.id != body_id {
+            continue;
+        }
+        dx = body.x - live.reveal_x;
+        dy = body.y - live.reveal_y;
+        return dx * dx + dy * dy <= limit;
+    }
+    return False;
 }
 
 def _window_open(live: LiveMatch) -> bool {
@@ -505,7 +574,12 @@ def _filtered_collapse(live: LiveMatch, seat: str) -> list[list[float]] {
     if seat == "" or not _window_open(live) {
         return empty;
     }
-    if seat == "B" or (seat == "A" and _post_in_patch(live)) {
+    body_id = live.shot_collapse_id;
+    if body_id == "" {
+        return empty;
+    }
+    owned = (seat == "B" and body_id == "enemy-post") or (seat == "A" and body_id == "post-a");
+    if owned or _body_in_patch(live, body_id) {
         return live.shot_collapse;
     }
     return empty;
@@ -549,12 +623,14 @@ def _encode(
         "angle": shown_angle,
         "path": _filtered_path(live, seat),
         "collapse": _filtered_collapse(live, seat),
+        "collapse_id": live.shot_collapse_id if len(_filtered_collapse(live, seat)) > 0 else "",
         "your_turn": seat != "" and live.table.rules.active == seat and live.table.rules.phase != "finished" and live.table.rules.result == "",
         "reveal_until": expiry,
         "reveal_x": live.reveal_x if opened else 0.0,
         "reveal_y": live.reveal_y if opened else 0.0,
         "reveal_radius": live.reveal_radius if opened else 0.0,
         "result": live.table.rules.result,
+        "perk": "scout" if _powered(live, seat) else "",
         "own_powered": _powered(live, seat),
         "shot_ready": _ready(live),
         "enemy_cores": _enemy_cores(live, seat),
@@ -688,6 +764,7 @@ def take_shot(
     reveal_radius = live.reveal_radius;
     previous_path = live.shot_path;
     previous_collapse = live.shot_collapse;
+    previous_collapse_id = live.shot_collapse_id;
     intact_a = True;
     intact_b = True;
     if live.mast_a is not None {
@@ -707,7 +784,7 @@ def take_shot(
         live.table.rules = checked.state;
         _launch(live, seat, weapon, aim.angle, aim.power, server_now(), True);
         live.shot_path = _path_of(live);
-        live.shot_collapse = _collapse_of(live);
+        _choose_collapse(live);
         live.table.shots = shots_before + 1;
         live.table.turn = live.table.rules.turn;
         live.table.revision = live.table.rules.revision;
@@ -738,6 +815,7 @@ def take_shot(
         live.reveal_radius = reveal_radius;
         live.shot_path = previous_path;
         live.shot_collapse = previous_collapse;
+        live.shot_collapse_id = previous_collapse_id;
         if live.mast_a is not None {
             mast = live.mast_a as Site;
             mast.intact = intact_a;
@@ -804,6 +882,7 @@ def rematch_room(live: LiveMatch, player_id: str) -> str {
     live.reveal_y = 0.0;
     live.shot_path = [];
     live.shot_collapse = [];
+    live.shot_collapse_id = "";
     if live.mast_a is not None {
         mast = live.mast_a as Site;
         mast.intact = True;
