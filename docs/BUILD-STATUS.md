@@ -132,7 +132,10 @@ Screenshots: `/opt/cursor/artifacts/fogshot-reveal-open.png` and `/opt/cursor/ar
 
 ## Remote
 
-`4d3f4867a7a9d8fe00aa20ade906315e3a919303` is the local commit for this slice. If the push below this line is missing, that SHA is not on the remote yet.
+`git push -u origin cursor/first-playable-66d6` updated `origin/cursor/first-playable-66d6` from `c82a33d` to `42c418d`. Both of these commits are on that remote branch:
+
+- `4d3f4867a7a9d8fe00aa20ade906315e3a919303` drives the Phaser shot from the shared Pymunk match.
+- `42c418de2941759e6aa6d854f95f74fb4d0b028b` records that SHA in this file.
 
 ## Next task
 
