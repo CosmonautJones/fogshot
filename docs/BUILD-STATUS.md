@@ -300,9 +300,21 @@ Node: `7 passed`. Jac playback file: `1 passed in 0.31s`. The full suite, same f
 
 Two browsers on `http://127.0.0.1:8000/`, clean `.fogshot-match`. During A's shell, A's shot time moved 0.22, 0.44, 0.67 at screen x 141, 162, 183. B did not show time 4.78. After A's reveal closed, A's `data-reveal` was `closed`, `data-broken` was `false`, `data-post-angle` was `0`, and `data-shot-screen-x` stayed empty on a later read. A's caption was `shell waiting`. B's caption was `supply dark / shell ready`, `data-broken` true, angle `0.9518626481783586`, and the shot dataset empty. No page errors and no Vite overlay. Rectangles and the launcher ring are still placeholders. A's own mast remains visible on A's dark half.
 
+## Verification
+
+`scripts/verify.sh` checks `jac --version` for 0.37.23, runs the Jac behavior suite, `node --test tests/playback_client.test.mjs`, and `tests/e2e/two_seats.mjs` against `http://127.0.0.1:8000/`. Locally that browser file printed `two seats ok` after a clean `jac run`: seat A ended `shell waiting` with an empty shot and `data-broken` false, and seat B was `supply dark` with the post broken. Seat B's 12 function bodies contained none of `12345.67`, `-9876.54`, or `87654.32`.
+
+GitHub Actions workflow `verify` on push `425039fa4c75e76eac1ddd2a26c3542278887c60`:
+
+https://github.com/CosmonautJones/fogshot/actions/runs/37235614100
+
+Conclusion: success. The log shows `jac 0.37.23 (Linux x86_64)`, `48 passed in 19.49s`, and `two seats ok`. The pull-request run of the same SHA also succeeded: https://github.com/CosmonautJones/fogshot/actions/runs/37235614405
+
+Issue comments on #2, #3, #4, and #5 were not posted. `gh api` returned HTTP 403 `Resource not accessible by integration` for `POST /repos/CosmonautJones/fogshot/issues/2/comments`. The issues stay open. No comment URLs exist.
+
 ## Next task
 
-Issue comments for #2–#5, then issue #6 Part A: a committed clean-checkout check, a real browser test, and a small GitHub Actions workflow. JacHammer is still not deployed. This environment has no JacHammer credentials or remote application target. One `jac run` process is the supported worker model. Do not treat localhost as a deploy. Basic shots stay free. The four-objective economy is still the later milestone.
+JacHammer is the remaining deployment blocker. This environment has no JacHammer credential and no remote application target, so no deploy was attempted and there is no hosted URL. Shared-password replacement and a room policy are still open under issue #6 Part B. One `jac run` process is the supported worker model. Do not treat localhost or the GitHub Actions runner as a deploy. Basic shots stay free. The four-objective economy is still the later milestone.
 
 ## Two outposts
 
