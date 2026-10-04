@@ -33,6 +33,7 @@ private-replays/
 *.log
 test-results/
 playwright-report/
+.playwright-mcp/
 # Workspaces and OS files
 .worktrees/
 .superpowers/
