@@ -3,6 +3,7 @@
 import json;
 import tempfile;
 import from server.authority { submit }
+import from server.clock { pin_clock }
 import from server.live { boot_match, claim_player, rematch_room, take_shot, watch }
 
 def _dir() -> str {
@@ -72,8 +73,9 @@ test "a wrong seat, a duplicate, a stale revision, and the wrong weapon do not s
 test "a miss still returns the projectile path and hides the enemy core" {
     directory = _dir();
     live = _ready(directory);
-    take_shot(live, "player-a", "flare-a", 20.0, 300.0, 800.0, 400.0, 1.0, 1000);
+    flare = json.loads(take_shot(live, "player-a", "flare-a", 20.0, 300.0, 800.0, 400.0, 1.0, 1000));
     take_shot(live, "player-b", "flare-b", 60.0, 300.0, 800.0, 400.0, 1.0, 2000);
+    pin_clock(flare["reveal_until"] + 1);
     missed_raw = take_shot(live, "player-a", "shell-miss", 100.0, 390.0, 800.0, 400.0, 1.0, 8000);
     missed = json.loads(missed_raw);
     assert missed["ok"];
@@ -133,7 +135,8 @@ test "restart keeps both seats, the dark supply, the dead core, and rematch" {
     assert finish["phase"] == "finished";
     denied = json.loads(take_shot(resumed, "player-b", "shell-late", 60.0, 300.0, 800.0, 400.0, 1.0, 12000));
     assert denied["code"] == "finished";
-    closed = watch(resumed, "player-a", finish["reveal_until"] + 1);
+    pin_clock(finish["reveal_until"] + 1);
+    closed = watch(resumed, "player-a", 0);
     assert "core-b" not in closed;
     restarted = boot_match(directory);
     assert claim_player(restarted, "player-c").code == "full";

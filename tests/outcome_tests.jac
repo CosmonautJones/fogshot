@@ -2,6 +2,7 @@
 
 import json;
 import tempfile;
+import from server.clock { pin_clock }
 import from server.live { boot_match, claim_player, rematch_room, take_shot, watch }
 
 def _dir() -> str {
@@ -52,7 +53,8 @@ test "a dark supply still allows a shell, then the core decides the winner" {
     assert "-9876.54" not in finish;
     denied = json.loads(take_shot(live, "player-b", "shell-late", 60.0, 300.0, 800.0, 400.0, 1.0, 12000));
     assert denied["code"] == "finished";
-    closed = watch(live, "player-a", won["reveal_until"] + 1);
+    pin_clock(won["reveal_until"] + 1);
+    closed = watch(live, "player-a", 0);
     assert "core-b" not in closed;
     assert "12345.67" not in closed;
     hidden = watch(live, "player-b", 12000);

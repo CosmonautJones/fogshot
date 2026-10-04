@@ -8,6 +8,7 @@ import from game.rules { MatchRules, resolve_cores }
 import from graph.supply { Cable, Site, assess }
 import from physics.pymunk_driver { PhysicsWorld, SimOutcome }
 import from server.authority { ClaimResult, Table, claim, reload_table, submit }
+import from server.clock { server_now }
 import from server.views { SecretBody, project_view }
 
 ::py::
@@ -234,10 +235,23 @@ def _reveal_on(live: LiveMatch, outcome: SimOutcome, seat: str, now_ms: int) -> 
     }
     hit = outcome.body(target);
     live.reveal_seat = seat;
-    live.reveal_until = now_ms + 3000;
+    live.reveal_until = server_now() + 3000;
     live.reveal_x = hit.x;
     live.reveal_y = hit.y;
     live.reveal_radius = 4.0;
+}
+
+def _post_in_patch(live: LiveMatch) -> bool {
+    limit = live.reveal_radius * live.reveal_radius + 0.0000001;
+    for body in live.table.secrets {
+        if body.id != "enemy-post" {
+            continue;
+        }
+        dx = body.x - live.reveal_x;
+        dy = body.y - live.reveal_y;
+        return dx * dx + dy * dy <= limit;
+    }
+    return False;
 }
 
 def _path_of(live: LiveMatch) -> list[list[float]] {
@@ -262,7 +276,8 @@ def _encode(
     angle: float
 ) -> str {
     seat = _seat(live, player_id);
-    opened = seat != "" and seat == live.reveal_seat and now_ms < live.reveal_until;
+    now = server_now();
+    opened = seat != "" and seat == live.reveal_seat and now < live.reveal_until;
     expiry = live.reveal_until if opened else 0;
     view = project_view(
         seat,
@@ -271,10 +286,11 @@ def _encode(
         live.reveal_y,
         live.reveal_radius,
         opened,
-        now_ms,
+        now,
         expiry
     );
-    visible = seat == "B" or opened;
+    # Seat B owns the post. Seat A sees its pose only inside this reveal patch.
+    visible = seat == "B" or (opened and _post_in_patch(live));
     shown_broken = broken if visible else False;
     shown_angle = angle if visible else 0.0;
     payload = {
@@ -481,7 +497,7 @@ def:protect watch_match(invite: str, now_ms: int) -> str {
     if invite != "fogshot" {
         return "{\"ok\": false, \"code\": \"unauthenticated\", \"seat\": \"\"}";
     }
-    return watch(shared_match(), str(jid(root)), now_ms);
+    return watch(shared_match(), str(jid(root)), server_now());
 }
 
 def:protect loose_shot(
@@ -506,6 +522,6 @@ def:protect loose_shot(
         canvas_w,
         canvas_h,
         dpr,
-        now_ms
+        server_now()
     );
 }

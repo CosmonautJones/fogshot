@@ -277,4 +277,32 @@ The Vite proxy at `http://127.0.0.1:8000/function/join_seat` returned the same s
 
 ## Next task
 
-JacHammer stays unattempted. This environment has no JacHammer credentials or remote application target. Do not treat this localhost 401 as a deploy.
+Stabilization is in progress on this branch. The next slice is the command envelope: epoch, expected turn, expected revision, weapon, and command id on the real client path. JacHammer stays unattempted. This environment has no JacHammer credentials or remote application target. Do not treat localhost as a deploy.
+
+## Stabilization baseline
+
+Fetched `origin/cursor/first-playable-66d6` at `36e8a5321d216ac3e153ba7e5fcad92e9290ef70`. No newer commits. The review patch applied as `863429b15da91d010e6c220265c75a502e76716f` and only adds `docs/reviews`.
+
+Baseline before gameplay edits, Jac 0.37.23:
+
+```text
+JAC_TEST_STRICT=1 jac test tests/physics_driver_tests.jac tests/scene_host_tests.jac tests/aim_rules_tests.jac tests/siege_view_tests.jac tests/authority_tests.jac tests/supply_tests.jac tests/live_match_tests.jac tests/outcome_tests.jac tests/qa_match_tests.jac -v
+```
+
+Result: `36 passed in 1.53s`. That count was measured again. It is not copied from the older note.
+
+Review findings F01–F07 were still present in that source. F04 (shared password and one room) and hosting stay deferred. No two-browser smoke was rerun before the clock edit; the earlier QA browsers were not repeated as if they were a new result.
+
+## Server clock
+
+Red run of `tests/clock_authority_tests.jac` before `server.clock` existed: `ModuleNotFoundError`. After the pin existed but live match still trusted `now_ms`: `2 failed in 0.64s`. `reveal_until` was not 13000. An open core reveal still published `broken` for the out-of-patch post.
+
+Green, after the server clock and the patch check:
+
+```text
+JAC_TEST_STRICT=1 jac test tests/clock_authority_tests.jac tests/live_match_tests.jac tests/outcome_tests.jac tests/qa_match_tests.jac tests/physics_driver_tests.jac tests/scene_host_tests.jac tests/aim_rules_tests.jac tests/siege_view_tests.jac tests/authority_tests.jac tests/supply_tests.jac -v
+```
+
+Result: `38 passed in 6.16s`.
+
+HTTP, after a fresh `jac run` on `http://127.0.0.1:8001`, two new users, invite `fogshot`. `POST /function/loose_shot` sent `now_ms` `9000000000000`. `reveal_until` was `1791134749644`, about 3014 ms after the wall clock, not the client stamp. Immediate `POST /function/watch_match` with `now_ms` 0, 1000, and `9000000000000` all kept that same deadline and an open reveal. After 3.3 seconds the same three client times all returned `reveal_until` 0, reveal closed, and no `enemy-post`. Retrying the same command id stayed closed. No token is recorded here.

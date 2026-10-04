@@ -2,6 +2,7 @@
 
 import json;
 import tempfile;
+import from server.clock { pin_clock }
 import from server.live { boot_match, claim_player, take_shot, watch }
 
 def _dir() -> str {
@@ -61,7 +62,8 @@ test "a canvas shell crosses the fog, collapses the post, and the reveal closes"
     assert _has_id(shell["view"]["reveal"]["bodies"], "enemy-post");
     assert "12345.67" not in shell_raw;
     assert "-9876.54" not in shell_raw;
-    closed = watch(live, "player-a", shell["reveal_until"] + 1);
+    pin_clock(shell["reveal_until"] + 1);
+    closed = watch(live, "player-a", 0);
     assert "enemy-post" not in closed;
     assert "12345.67" not in closed;
     assert "-9876.54" not in closed;
