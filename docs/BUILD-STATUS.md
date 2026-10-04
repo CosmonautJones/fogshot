@@ -292,7 +292,7 @@ JAC_TEST_STRICT=1 jac test tests/physics_driver_tests.jac tests/scene_host_tests
 node --test tests/playback_client.test.mjs
 ```
 
-Jac result before the empty-seat filter: `46 passed in 5.77s`. Nearby files after that filter: `9 passed in 4.76s`. Node result: `3 passed`.
+Jac result: `46 passed in 2.45s`. Node result: `3 passed`.
 
 ## First impact
 
