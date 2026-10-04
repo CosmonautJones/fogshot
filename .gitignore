@@ -1,0 +1,40 @@
+# Credentials and private runtime state
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+.secrets/
+secrets/
+credentials.json
+# Local dependencies, generated output and caches
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.jac/
+.jaseci/
+.jac-cache/
+build/
+dist/
+coverage/
+.pytest_cache/
+.cache/
+# Match data and local evidence
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.db
+runtime-data/
+private-replays/
+*.log
+test-results/
+playwright-report/
+# Workspaces and OS files
+.worktrees/
+.superpowers/
+.DS_Store
+Thumbs.db
