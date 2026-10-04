@@ -184,12 +184,27 @@ not bind Phaser's scene `this`, so create/update/input callbacks live in
 handler names on the field element (`pointerdown`, `pointermove`,
 `pointerup`).
 
+## Browser match
+
+`def:protect join_seat`, `watch_match`, and `loose_shot` share one
+`LiveMatch`. A canvas pointer becomes `release_pull`, then Pymunk. The page
+draws that path. Pointer `(20, 300)` on 800 by 400 is about angle 0 at power
+5. The browser post is at x=21 with health 0.5, separate from the siege post
+at x=20 with health 4. The shell's returned path has x greater than 20, the
+post angle passes 0.7, and the reveal includes `enemy-post` until expiry.
+Seat B's serialized watch omits `12345.67`, `-9876.54`, and `87654.32`.
+
+A two-context browser run confirmed seats A and B, a collapsed post at angle
+about 1.309 while the reveal was open, the reveal closing afterward, and 64
+response bodies from the second context with those sentinel strings absent.
+`enemy-post` was present in that context because B owns it.
+
 ## Not proven
 
 - No `def:protect` HTTP 401 was captured.
-- No second browser joined a match.
-- The page does not collapse a post or open a temporary enemy reveal.
 - The supply walk is not triggered by a Pymunk break.
+- A process restart does not restore the fallen post. The journal stores
+  turn, revision, and shot count, not Pymunk poses.
 - JacHammer was not deployed. No credentials or remote application target
   were available. Do not treat `jac run` on localhost as a deployment.
 - Outcomes from one process are not a cross-device deterministic replay.

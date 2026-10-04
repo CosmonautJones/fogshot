@@ -106,6 +106,7 @@ obj PhysicsWorld {
     has pending: list[tuple[str, str, float]] = [];
     has dt: float = 1.0 / 180.0;
     has deal_damage: bool = True;
+    has trace: list[float] = [];
 
     def ensure() -> None {
         if self.space is not None {
@@ -119,6 +120,30 @@ obj PhysicsWorld {
         self.damaged = [];
         self.pending = [];
         self.space.on_collision(3, 2, post_solve=_post_solve, data={"world": self});
+        self.trace = [];
+    }
+
+    def drop_projectiles() -> None {
+        self.ensure();
+        kept: list[Tracked] = [];
+        for track in self.tracks {
+            if track.role == "projectile" {
+                _drop(self.space, track.body, track.shape, track.pin);
+            } else {
+                kept.append(track);
+            }
+        }
+        self.tracks = kept;
+    }
+
+    def _remember_projectile() -> None {
+        for track in self.tracks {
+            if track.role == "projectile" {
+                pose = _pose(track.body) as tuple[float, float, float];
+                self.trace.append(pose[0]);
+                self.trace.append(pose[1]);
+            }
+        }
     }
 
     def add_ground(body_id: str, x1: float, y1: float, x2: float, y2: float) -> None {
@@ -353,11 +378,15 @@ obj PhysicsWorld {
         self.pairs = [];
         self.damaged = [];
         self.pending = [];
+        self.trace = [];
         steps = 0;
         while steps < max_steps {
             self.space.step(self.dt);
             steps = steps + 1;
             self.flush();
+            if steps % 20 == 0 {
+                self._remember_projectile();
+            }
         }
         return self.snapshot(steps);
     }

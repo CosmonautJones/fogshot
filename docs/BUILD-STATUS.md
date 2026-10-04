@@ -12,15 +12,15 @@ Gameplay work is on branch `cursor/first-playable-66d6`. This file is updated wh
 
 ## What runs
 
-Jac 0.37.23, Pymunk 7.3.0, pull-back aim, turn rules, one trusted siege shot, an allowlist view, a two-seat journal, a supply walk, and a Phaser field.
+Jac 0.37.23, Pymunk 7.3.0, pull-back aim, turn rules, one trusted siege shot, an allowlist view, a two-seat journal, a supply walk, and a Phaser field driven by one shared match.
 
-Combined suite after the page boot:
+Combined suite after the authoritative browser shot:
 
 ```text
-JAC_TEST_STRICT=1 jac test tests/physics_driver_tests.jac tests/scene_host_tests.jac tests/aim_rules_tests.jac tests/siege_view_tests.jac tests/authority_tests.jac tests/supply_tests.jac -v
+JAC_TEST_STRICT=1 jac test tests/physics_driver_tests.jac tests/scene_host_tests.jac tests/aim_rules_tests.jac tests/siege_view_tests.jac tests/authority_tests.jac tests/supply_tests.jac tests/live_match_tests.jac -v
 ```
 
-Result: `31 passed in 1.02s`.
+Result after the browser proof: `32 passed in 0.92s`. The same command before the client wiring was `32 passed in 1.88s`. The earlier page-boot suite was `31 passed in 1.02s` without `tests/live_match_tests.jac`.
 
 ```text
 JAC_TEST_STRICT=1 jac test tests/physics_driver_tests.jac tests/scene_host_tests.jac tests/aim_rules_tests.jac tests/siege_view_tests.jac -v
@@ -66,16 +66,14 @@ Details, the Pymunk `::py::` import seam, and the commands are in [RUNTIME.md](R
 
 ## Limitations
 
-- `jac run` serves `http://localhost:8000/`. Phaser 3.90.0 starts in WebGL. A browser pull draws a projectile that stops on the fog edge. That projectile is the local guide in `client/mount_field.js`. It is not a server hit, and the drawn post does not break.
+- `jac run` serves `http://localhost:8000/`. A browser pull submits to the one in-process match and the gold dot follows that Pymunk path, including past the fog edge. A hitting shell collapses the braced post during a temporary reveal, then the reveal closes. A second browser joins the same match.
+- The shared match is one process-wide object plus `runtime-data/browser-match`. Restarting `jac run` builds a fresh physics world. The journal still stores turn, revision, and shot count, not Pymunk poses, so a restart does not restore a fallen post.
 - The scene-host test still counts handler names. The browser mount registers `pointerdown`, `pointermove`, and `pointerup` once and destroys the Phaser game on effect cleanup.
-- Two browsers, a temporary enemy reveal, and a server-driven collapse have not been exercised.
 - Direct `import pymunk` does not compile on Jac 0.37.23 (E1030 on `Body.angle.setter`). The solver is still Pymunk, loaded through `_pymunk()`.
-- The measured 0.15 / power-14 shell from launcher A lands at the midline. A post at x=24 is past that landing, so the siege fixture places the target at x=20. This is not a claim that every legal aim reaches the far base.
-- The view test serializes the projection object. It does not yet inspect HTTP replay, error, polling, or reconnect bytes.
-- The match journal stores seats, rules, and a shot count. It does not yet store a Pymunk body snapshot, and it does not serve `def:protect` over HTTP.
+- The measured 0.15 / power-14 shell from launcher A lands at the midline. A post at x=24 is past that landing, so the siege fixture places the target at x=20. The browser pull is a different shot: pointer `(20, 300)` on an 800 by 400 canvas is about angle 0 at power 5, against a post at x=21 with health 0.5.
+- The in-process view test serializes the projection object. The two-browser proof inspected the second context's HTTP response bodies (64 responses, sentinel absent). That is not a replay, error-page, or reconnect capture, and an unauthenticated HTTP 401 was not recorded.
 - Supply reachability is tested on nodes that are not attached to `root`. It is not yet wired to a physical break or a powered indicator on the page.
-- No two-client browser session has been implemented or tested.
-- JacHammer deployment has not been attempted.
+- JacHammer deployment has not been attempted. This environment has no JacHammer target or credentials.
 - `jac check` on the driver warns `W1037` for explicit `any` at the solver boundary.
 - Outcomes are the in-memory `SimOutcome` from one process. That is not a cross-device deterministic replay.
 
@@ -89,10 +87,47 @@ Result: `6 passed in 0.80s`. The red run was `ModuleNotFoundError: No module nam
 
 `PowerWalk` follows intact `Cable` edges. A broken relay blocks the only route. An intact alternate still powers the objective. A two-node cycle returns. A separated objective stays a target, and `shot_ready` stays true. Another owner's nodes are neither powered nor targets. `sentinel-supply` is not in `[root -->[?:Site]]`.
 
-## Browser
+## Authoritative browser match
 
-`jac build` exited 0 (client bundle built, 9/9 server modules compiled). `jac run` logged `Server ready` with the app on `http://localhost:8000/` and the API on `http://localhost:8001/`. The page title was `Jac App (Dev)`. The console logged `Phaser v3.90.0 (WebGL | Web Audio)`. The only console error was a missing `/favicon.ico` (404). A straight pull from the launcher left the projectile on the fog boundary and did not draw it in the dark half.
+Red run before `server/live.jac` existed:
+
+```text
+JAC_TEST_STRICT=1 jac test tests/live_match_tests.jac -v
+```
+
+Result: `ModuleNotFoundError: No module named 'server.live'`.
+
+Green run, then the combined suite:
+
+```text
+JAC_TEST_STRICT=1 jac test tests/live_match_tests.jac -v
+```
+
+Result: `1 passed in 2.28s`.
+
+```text
+JAC_TEST_STRICT=1 jac test tests/physics_driver_tests.jac tests/scene_host_tests.jac tests/aim_rules_tests.jac tests/siege_view_tests.jac tests/authority_tests.jac tests/supply_tests.jac tests/live_match_tests.jac -v
+```
+
+Result before the client wiring: `32 passed in 1.88s`. Re-run after the browser proof: `32 passed in 0.92s`.
+
+`take_shot` turns a canvas pointer into `release_pull`, submits that angle and power to the journal, then runs Pymunk. Pointer `(20, 300)` on an 800 by 400 canvas is the browser shell. The returned path includes a point with x greater than 20. The braced post at x=21, health 0.5, breaks once and its angle passes 0.7. The shooter's reveal includes `enemy-post` until `now_ms` passes `reveal_until`. After that, seat A's watch text does not contain `enemy-post`. Seat B's watch contains their own post and does not contain `12345.67`, `-9876.54`, or the far marker `87654.32`. The sentinel owner is `hidden`, so neither seat serializes it.
+
+`def:protect join_seat`, `watch_match`, and `loose_shot` share that match for invite `fogshot`. Two browser contexts signed up, logged in, and joined. Seat A then seat B.
+
+Browser proof against `jac run` at `http://localhost:8000/` (API `http://localhost:8001/`), after a clean `runtime-data/browser-match`:
+
+- Context A dataset seat `A`. Context B dataset seat `B`.
+- A's flare pull released at about `(20, 300)`. `data-authoritative` became `pymunk`. `data-shot-max-x` was `20.85`. `data-broken` stayed `false`. `data-post-angle` was `0.220`. `data-reveal` opened.
+- B's pull released at about `(60, 300)`. A's `data-phase` became `combat`.
+- A's shell pull used the same pointer. `data-reveal` was `open`, `data-broken` was `true`, `data-post-angle` was `1.309`, `data-shot-max-x` was `20.85`, and `data-shot-screen-x` was `413` (past the fog edge at 400). The open screenshot shows the tilted post in the dark half and the gold dot at the impact.
+- After the reveal window, A's `data-reveal` was `closed`. The closed screenshot no longer draws that post. `data-post-angle` stayed `1.309`.
+- B's dataset was seat `B`, phase `combat`, broken `true`, post angle `1.309` (B owns the post).
+- All 64 HTTP response bodies captured for context B were scanned. None contained `12345.67`, `-9876.54`, or `87654.32`. At least one contained `enemy-post`, which is B's own structure.
+- Page errors on both contexts: none.
+
+Screenshots: `/opt/cursor/artifacts/fogshot-reveal-open.png` and `/opt/cursor/artifacts/fogshot-reveal-closed.png`.
 
 ## Next task
 
-Serve the journal through authenticated `def:protect` endpoints and prove an unauthenticated call is rejected with HTTP 401. Drive the Phaser projectile from that response, including the braced-post collapse and a temporary reveal, and show that a second browser does not receive the sentinel coordinates.
+Capture an unauthenticated `POST /function/join_seat` and record the HTTP 401. Persist the Pymunk pose in the pre-shot checkpoint so a restart restores the fallen post. Tie a physical break to the supply walk and show that on the page. JacHammer stays unattempted until a real remote target and credentials exist.

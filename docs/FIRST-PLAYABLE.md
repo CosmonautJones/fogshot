@@ -69,12 +69,12 @@ Derive actual codespace annotations and scaffold paths from the selected compile
 
 ## Task 6: Playable client
 
-- [ ] Use two browser contexts with separate sessions. Exercise joining, both flares, shell launch, local collapse, fog return, next turn, win/draw, and refresh.
-- [ ] Implement Jac scene orchestration and Phaser presentation, original industrial shapes, captions, and reduced shake.
-- [ ] Animate only the authoritative permitted result. The client never decides a hidden hit.
-- [ ] Capture actual two-client evidence, run the tests/build, commit, and push.
+- [x] Two browser contexts with separate sessions joined one match. Both flares and the shell were pulled on the page. The shell collapsed the braced post, the reveal opened, then the reveal closed. Win/draw and refresh-after-restart are still open. `tests/live_match_tests.jac` and the browser capture in [BUILD-STATUS.md](BUILD-STATUS.md).
+- [x] Jac scene orchestration and Phaser presentation. The caption reports seat, phase, and weapon. Shapes are original rectangles and a circle. Reduced shake was not added.
+- [x] The drawn projectile is the server path. `client/mount_field.js` does not clamp that path to the fog edge and does not decide the hit.
+- [x] Two-client evidence is in [BUILD-STATUS.md](BUILD-STATUS.md). The second context's response bodies omit `12345.67`, `-9876.54`, and `87654.32`.
 
-`jac run` serves `main.jac` at `http://localhost:8000/`. Phaser 3.90.0 logs `Phaser v3.90.0 (WebGL | Web Audio)`. A pull on the launcher draws a projectile that stops on the fog boundary. The friendly post does not fall, and nothing on the page reveals the enemy half. Two browser sessions are still open.
+`jac run` serves `main.jac` at `http://localhost:8000/`. Phaser 3.90.0 logs `Phaser v3.90.0 (WebGL | Web Audio)`. A pull submits `loose_shot`. The gold dot follows the returned path past the fog edge. A hitting shell draws the fallen post only while that seat's reveal is open.
 
 ## Task 7: Supply graph
 

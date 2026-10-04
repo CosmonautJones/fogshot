@@ -4,11 +4,11 @@
 
 A Jac-first multiplayer physics-siege game: pull back, launch into a hidden outpost, remember the brief glimpse, and bring its infrastructure down.
 
-**Current status: Jac 0.37.23 serves a Phaser 3.90.0 field at `jac run`. The page shows a launcher, a friendly post, fog, and a pull whose projectile stops at the fog. The tested Pymunk collapse, allowlist view, journal, and supply walk are not yet driven by that page.** See [BUILD-STATUS](docs/BUILD-STATUS.md) and [RUNTIME](docs/RUNTIME.md).
+**Current status: Jac 0.37.23 serves a Phaser 3.90.0 field at `jac run`. A pull submits to one shared match, the drawn shot is the Pymunk path, a hitting shell collapses the braced post, and the impact reveal closes. A second browser joins that match and does not receive the sentinel coordinates. The supply walk is still not tied to the break. JacHammer has not been deployed.** See [BUILD-STATUS](docs/BUILD-STATUS.md) and [RUNTIME](docs/RUNTIME.md).
 
 ## Selected direction
 
-Jac owns authored game rules, scene orchestration, input conversion, structural-damage policy, turn authority, visibility projection, and the supply graph. Phaser 3.90.0 is the pinned browser presentation dependency and has not been opened yet. Pymunk 7.3.0 is the trusted low-level 2D solver, called from Jac through a `::py::` import seam. JacHammer is the intended initial hosting target, not a completed deployment.
+Jac owns authored game rules, scene orchestration, input conversion, structural-damage policy, turn authority, visibility projection, and the supply graph. Phaser 3.90.0 is the pinned browser presentation dependency. Pymunk 7.3.0 is the trusted low-level 2D solver, called from Jac through a `::py::` import seam. JacHammer is the intended initial hosting target, not a completed deployment.
 
 This is not a JavaScript game with a cosmetic Jac endpoint. It is also not a claim that the third-party renderer or solver was written in Jac.
 

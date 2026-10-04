@@ -108,10 +108,14 @@ jac run
 
 Phaser 3.90.0's ESM build exports `Game` and `AUTO` by name, so the Jac import does not need a re-export shim. Scene callbacks still live in `client/mount_field.js` because a Jac lambda does not bind Phaser's `this`.
 
-A browser pull on the 800 by 400 canvas moved a projectile to the fog boundary at x=400 and left the right half covered. That is local presentation. The server did not simulate the shot.
+The browser pull is no longer a local fog-edge guide. `server/live.jac` runs the canvas pointer through `release_pull` and Pymunk. `client/mount_field.js` draws `path` from that response. Pointer `(20, 300)` on the 800 by 400 canvas crosses x=20. The siege shot (angle 0.15, power 14, post at x=20, health 4) is a separate fixture and still passes.
+
+Two Playwright contexts joined invite `fogshot`. The second context's response bodies did not contain `12345.67`, `-9876.54`, or `87654.32`. Details and the `32 passed` command are in [BUILD-STATUS.md](BUILD-STATUS.md).
 
 ## Not claimed
 
 - JacHammer has not been deployed. This environment has no JacHammer credentials or remote application target.
-- The browser projectile is not the Pymunk siege shot.
-- Scene-host coverage is the handler set in Jac. The browser path destroys `Phaser.Game` in the effect cleanup, and that destroy was not asserted by an automated test.
+- The browser shell is the canvas shot (about angle 0, power 5, post at x=21, health 0.5). It is not the siege fixture's 0.15 / power-14 shot.
+- Restarting `jac run` does not restore Pymunk poses. The journal still stores turn, revision, and shot count.
+- An unauthenticated HTTP 401 was not captured.
+- Scene-host coverage is the handler set in Jac. The browser path destroys `Phaser.Game` in the effect cleanup.
