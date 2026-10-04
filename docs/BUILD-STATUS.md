@@ -295,6 +295,10 @@ JAC_TEST_STRICT=1 jac test tests/physics_driver_tests.jac tests/scene_host_tests
 
 Result: `48 passed in 4.20s`.
 
+The client bundle also has to emit `client/playback.js`. Importing it from `client/battlefield.jac` is what places it beside `mount_field.js`. Without that, `jac run` returned HTTP 500 for `compiled/client/mount_field.js` (`E7002`, unresolved `./playback.js`).
+
+Two browsers on `http://127.0.0.1:8000/` then joined a clean match. Seat A stayed `supply on / shell ready`. After A's combat shell, seat B read `supply dark / shell ready`, `data-broken=true`, and post angle `0.9518626481783586`. Neither caption contained `12345.67`, `-9876.54`, or `87654.32`. A Vite overlay appeared when the match directory changed during a client rebuild; dismissing it left those captions. This was one local `jac run`, not a deploy.
+
 ## Shot playback
 
 Red run of `tests/playback_tests.jac` while `watch` still returned `[]`: `1 failed in 1.32s` at `assert len(watched["path"]) > 3`. The captured path was `[]`. `node --test tests/playback_client.test.mjs` first failed with `ERR_MODULE_NOT_FOUND` for `client/playback.js`.
