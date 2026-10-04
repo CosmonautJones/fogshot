@@ -61,11 +61,11 @@ Derive actual codespace annotations and scaffold paths from the selected compile
 ## Task 5: Match authority and recovery
 
 - [x] Bind a session to one of two seats; invitation codes are not shot authority. A third player cannot replace an occupant. `tests/authority_tests.jac`. Seats are player ids in this process. JWT `def:protect` binding is still open.
-- [x] Test duplicate command IDs, changed payload with reused ID, stale revision, simultaneous submission, finished match, and unauthenticated access. Simultaneous means the in-process `in_flight` flag. Unauthenticated means an empty player id, not a captured HTTP 401.
+- [x] Test duplicate command IDs, changed payload with reused ID, stale revision, simultaneous submission, finished match, and unauthenticated access. Simultaneous means the in-process `in_flight` flag. The in-process unauthenticated case is an empty player id. The HTTP 401 is the later capture in [BUILD-STATUS.md](BUILD-STATUS.md).
 - [x] Implement one verified per-match authority boundary. Do not claim a process lock supports multiple workers. `server/authority.jac`.
 - [x] Persist accepted-command journal and pre-shot checkpoint; commit one outcome and next turn consistently. `journal.jsonl` is the commit. `pending.json` is the checkpoint and is deleted on reload when no commit line exists. The checkpoint stores turn, revision, and shot count, not Pymunk poses.
 - [x] Test restart before and after outcome commit. Retrying must not create another shot or advance an extra turn.
-- [x] Verify, commit, and push. `d223c1c9ceb19997c88d44c5354ffd55a2c76688` on `origin/cursor/first-playable-66d6`. HTTP 401 remains open, as the unauthenticated case in that commit is an empty player id.
+- [x] Verify, commit, and push. `d223c1c9ceb19997c88d44c5354ffd55a2c76688` on `origin/cursor/first-playable-66d6`. That commit's unauthenticated case is an empty player id. The HTTP 401 was captured later and is recorded in [BUILD-STATUS.md](BUILD-STATUS.md).
 
 ## Task 6: Playable client
 

@@ -41,7 +41,7 @@ JAC_TEST_STRICT=1 jac test tests/authority_tests.jac -v
 Result: `6 passed in 1.13s`. The red run was `ModuleNotFoundError: No module named 'server.authority'`.
 
 - Two player ids claim seats A and B. A third id is `full`. The same id keeps its seat.
-- An empty player id cannot submit, even with the invite. That invite check is in-process. It is not an HTTP 401 yet.
+- An empty player id cannot submit, even with the invite. That invite check is in-process. The HTTP 401 for a missing JWT is a separate capture, recorded below.
 - The same command id and payload returns the stored turn and does not increment `shots`. A changed payload on that id is `conflict`.
 - `in_flight` rejects a second submit with `busy`. This is one process flag, not a lock across workers.
 - A stale revision is rejected. After both flares, `force_finished` makes the next shell `finished`.
@@ -73,7 +73,7 @@ Details, the Pymunk `::py::` import seam, and the commands are in [RUNTIME.md](R
 - The scene-host test still counts handler names. The browser mount registers `pointerdown`, `pointermove`, and `pointerup` once and destroys the Phaser game on effect cleanup.
 - Direct `import pymunk` does not compile on Jac 0.37.23 (E1030 on `Body.angle.setter`). The solver is still Pymunk, loaded through `_pymunk()`.
 - The measured 0.15 / power-14 shell from launcher A lands at the midline. A post at x=24 is past that landing, so the siege fixture places the target at x=20. The browser pull is a different shot: pointer `(20, 300)` on an 800 by 400 canvas is about angle 0 at power 5, against a post at x=21 with health 0.5.
-- The in-process view test serializes the projection object. The two-browser proof inspected the second context's HTTP response bodies (64 responses, sentinel absent). That is not a replay, error-page, or reconnect capture, and an unauthenticated HTTP 401 was not recorded.
+- The in-process view test serializes the projection object. The two-browser proof inspected the second context's HTTP response bodies (64 responses, sentinel absent). That is not a replay or reconnect capture. The unauthenticated HTTP 401 is recorded below.
 - Supply reachability is tested on nodes that are not attached to `root`. A broken braced post now cuts B's only cable, and the page shows that as B's own lamp. The lamp is a boolean for the viewing seat. Enemy core coordinates stay out of that seat's payload.
 - JacHammer deployment has not been attempted. This environment has no JacHammer target or credentials.
 - `jac check` on the driver warns `W1037` for explicit `any` at the solver boundary.
@@ -217,7 +217,7 @@ Browser pass against `jac run` at `http://localhost:8000/`, two contexts plus a 
 
 Screenshots: `/opt/cursor/artifacts/fogshot-qa-supply-dark.png` and `/opt/cursor/artifacts/fogshot-qa-result-a.png`.
 
-An unseated full page reports supply dark because it has no seat. That caption is the `(full)` code plus an empty seat, not B's lamp. Draw was not played in the browser. No HTTP 401 was captured. JacHammer was not deployed.
+An unseated full page reports supply dark because it has no seat. That caption is the `(full)` code plus an empty seat, not B's lamp. Draw was not played in the browser. The unauthenticated HTTP 401 is recorded below. JacHammer was not deployed.
 
 ## Remote
 
@@ -233,7 +233,47 @@ An unseated full page reports supply dark because it has no seat. That caption i
 - `30337d40be0ee84840926cc9de221dfaa60da79f` names that evidence commit.
 - `30c236c3eb5bb788bd8130ad5d9c58cf4ccbdc27` restores a restarted match from the journal and ignores a repeated command.
 - `b0c8b95ddd7995175af9283dea461aa141281176` lets a refreshed browser reclaim its seat.
+- `7be2563b9def5258eb7fd0b61c340b33456722e1` records the QA passes, the journal replay, and the browser restart.
+
+## Unauthenticated join
+
+Captured against the already running `jac run` process. API `http://127.0.0.1:8001/`. No `Authorization` header. The status was not invented.
+
+```text
+curl -sS -D - -X POST 'http://127.0.0.1:8001/function/join_seat' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json' \
+  --data '{"invite":"fogshot"}'
+```
+
+Request:
+
+```text
+POST /function/join_seat HTTP/1.1
+Host: 127.0.0.1:8001
+Accept: application/json
+Content-Type: application/json
+
+{"invite":"fogshot"}
+```
+
+Response at `Date: Sun, 04 Oct 2026 17:02:55 GMT`, request id `0d19c4541d794b06843c51cfd1321d07`:
+
+```text
+HTTP/1.1 401 Unauthorized
+Server: jac
+Content-Type: application/json
+Content-Length: 106
+
+{"ok": false, "type": "error", "data": null, "error": {"code": "UNAUTHORIZED", "message": "Unauthorized"}}
+```
+
+The same process logged `127.0.0.1 "POST /function/join_seat HTTP/1.1" 401 106 0.7ms 0d19c4541d794b06843c51cfd1321d07`.
+
+`def:protect join_seat` is why this is 401. The live `GET /openapi.json` lists that path with `security: [{"BearerAuth": []}]` and bearer format JWT. This request sent no bearer token. The body is the server error envelope. It is not the function's own `{"ok": false, "code": "unauthenticated", "seat": ""}`, so the function body did not run. The body contains no seat, no core id, and no sentinel coordinate. OpenAPI documents only response 200 for this path. The 401 is from the live call.
+
+The Vite proxy at `http://127.0.0.1:8000/function/join_seat` returned the same status and the same body. Its API request id was `f1f81b14405947b98665e67cf84f6adc`.
 
 ## Next task
 
-Capture an unauthenticated `POST /function/join_seat` and record the HTTP 401. JacHammer stays unattempted until a real remote target and credentials exist.
+JacHammer stays unattempted. This environment has no JacHammer credentials or remote application target. Do not treat this localhost 401 as a deploy.

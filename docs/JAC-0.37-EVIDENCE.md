@@ -67,9 +67,9 @@ entry observed in the 0.37.23 web-app scaffold is `def:pub app -> JsxElement`
 whose body is the JSX expression. There is no wrapper `cl {}` block.
 
 `def:pub` in a server-anchored module is an unauthenticated endpoint.
-`def:protect` requires a JWT and runs on the caller's root. The Fogshot
-journal does not use `def:protect` yet. Its unauthenticated case is an empty
-player id, not a captured HTTP 401.
+`def:protect` requires a JWT and runs on the caller's root. The in-process
+journal still treats an empty player id as unauthenticated. The live
+`def:protect join_seat` HTTP 401 is recorded in [BUILD-STATUS.md](BUILD-STATUS.md).
 
 `jac install` of the web app pulled React 19.3.0, react-dom 19.3.0,
 react-router-dom 6.30.6, Vite 6.4.3, and Phaser 3.90.0. Phaser 4.2.1 exists
@@ -203,7 +203,7 @@ A later two-context run broke that post as B's supply mast. B's lamp went dark w
 
 ## Not proven
 
-- No `def:protect` HTTP 401 was captured.
+- An unauthenticated `POST /function/join_seat` returned HTTP 401. See [BUILD-STATUS.md](BUILD-STATUS.md). That capture is localhost `jac run`, not a JacHammer deploy.
 - A process restart replays committed journal shots, so the fallen post and the result come back on this machine. That is not a cross-device deterministic replay. An uncommitted pending file is still dropped.
 - JacHammer was not deployed. No credentials or remote application target
   were available. Do not treat `jac run` on localhost as a deployment.
