@@ -3,6 +3,7 @@
 import from "react" { useEffect }
 import from "@jac/runtime" { SignupResult, jacLogin, jacSignup }
 import from "./mount_field.js" { mountField }
+import from "./playback.js" { sampleAt }
 import from server.live { join_seat, loose_shot, play_again, watch_match }
 
 glob INVITE: str = "fogshot";
@@ -187,6 +188,9 @@ def:pub Battlefield -> JsxElement {
 
     useEffect(lambda {
         parent = document.getElementById("fogshot-field");
+        if sampleAt is None {
+            return lambda { };
+        }
         handle = mountField(parent) as any;
         _set_caption = remember;
         _apply = lambda (raw: str) {
