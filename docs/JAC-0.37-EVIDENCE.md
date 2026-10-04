@@ -199,10 +199,11 @@ about 1.309 while the reveal was open, the reveal closing afterward, and 64
 response bodies from the second context with those sentinel strings absent.
 `enemy-post` was present in that context because B owns it.
 
+A later two-context run broke that post as B's supply mast. B's lamp went dark while the shell stayed ready. A's lob set the result to A. Rematch restored recon and B's lamp. Seat B's 79 response bodies omitted `12345.67`, `-9876.54`, `87654.32`, `core-a`, and `4.25`.
+
 ## Not proven
 
 - No `def:protect` HTTP 401 was captured.
-- The supply walk is not triggered by a Pymunk break.
 - A process restart does not restore the fallen post. The journal stores
   turn, revision, and shot count, not Pymunk poses.
 - JacHammer was not deployed. No credentials or remote application target

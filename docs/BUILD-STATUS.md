@@ -14,7 +14,7 @@ The authoritative browser match is commit `4d3f4867a7a9d8fe00aa20ade906315e3a919
 
 ## What runs
 
-Jac 0.37.23, Pymunk 7.3.0, pull-back aim, turn rules, one trusted siege shot, an allowlist view, a two-seat journal, a supply walk, and a Phaser field driven by one shared match.
+Jac 0.37.23, Pymunk 7.3.0, pull-back aim, turn rules, one trusted siege shot, an allowlist view, a two-seat journal, a supply walk tied to the braced post, one core per side, rematch, and a Phaser field driven by one shared match.
 
 Combined suite after the authoritative browser shot:
 
@@ -74,7 +74,7 @@ Details, the Pymunk `::py::` import seam, and the commands are in [RUNTIME.md](R
 - Direct `import pymunk` does not compile on Jac 0.37.23 (E1030 on `Body.angle.setter`). The solver is still Pymunk, loaded through `_pymunk()`.
 - The measured 0.15 / power-14 shell from launcher A lands at the midline. A post at x=24 is past that landing, so the siege fixture places the target at x=20. The browser pull is a different shot: pointer `(20, 300)` on an 800 by 400 canvas is about angle 0 at power 5, against a post at x=21 with health 0.5.
 - The in-process view test serializes the projection object. The two-browser proof inspected the second context's HTTP response bodies (64 responses, sentinel absent). That is not a replay, error-page, or reconnect capture, and an unauthenticated HTTP 401 was not recorded.
-- Supply reachability is tested on nodes that are not attached to `root`. It is not yet wired to a physical break or a powered indicator on the page.
+- Supply reachability is tested on nodes that are not attached to `root`. A broken braced post now cuts B's only cable, and the page shows that as B's own lamp. The lamp is a boolean for the viewing seat. Enemy core coordinates stay out of that seat's payload.
 - JacHammer deployment has not been attempted. This environment has no JacHammer target or credentials.
 - `jac check` on the driver warns `W1037` for explicit `any` at the solver boundary.
 - Outcomes are the in-memory `SimOutcome` from one process. That is not a cross-device deterministic replay.
@@ -130,13 +130,57 @@ Browser proof against `jac run` at `http://localhost:8000/` (API `http://localho
 
 Screenshots: `/opt/cursor/artifacts/fogshot-reveal-open.png` and `/opt/cursor/artifacts/fogshot-reveal-closed.png`.
 
+## Cores, supply, victory, rematch
+
+Red run after the rules were in the working tree and before the own-core assertion was corrected:
+
+```text
+JAC_TEST_STRICT=1 jac test tests/outcome_tests.jac -v
+```
+
+Result: `AssertionError` at `assert "4.25" not in opened`. That string is seat A's own core in A's view. The opponent check stays on B's payload.
+
+Green run of the same file: `1 passed in 1.07s`.
+
+Combined suite after the live brace clearance change (`0.22` on the browser post; the siege pivot stays `0.35`):
+
+```text
+JAC_TEST_STRICT=1 jac test tests/physics_driver_tests.jac tests/scene_host_tests.jac tests/aim_rules_tests.jac tests/siege_view_tests.jac tests/authority_tests.jac tests/supply_tests.jac tests/live_match_tests.jac tests/outcome_tests.jac -v
+```
+
+Result: `33 passed in 1.16s`.
+
+`tests/outcome_tests.jac` fires the canvas pointers. A's shell at `(20, 300)` breaks the post, leaves `result` empty, and does not put `core-b` in A's JSON. B's watch then has `own_powered` false, `shot_ready` true, and `own_core` true. B's shell is accepted. A's lob at `(10, 390)` sets `result` to `A` and `phase` to `finished`. A later shell is `finished`. After `reveal_until`, A's watch omits `core-b`. B's watch omits `4.25`, `12345.67`, `-9876.54`, and `87654.32`. `rematch_room` restores recon, an intact mast, and `own_powered` true.
+
+The browser post uses pivot clearance `0.22` so a flat shell still hits when the pointer is a pixel off the launcher line. At clearance `0.35`, angle `-0.00457` rolls under the brace. The siege fixture is unchanged.
+
+Browser proof against `jac run` at `http://localhost:8000/` (API `http://localhost:8001/`), after wiping `runtime-data/browser-match` and restarting `jac run`. Two Playwright contexts, not two tabs.
+
+- Joined as seat A and seat B. Both started in `recon` with `data-powered=true`, `data-shot-ready=true`, `data-enemy-cores=1`, and `data-own-core=true`.
+- Both flares landed. Phase became `combat`.
+- A's shell released at about `(20, 308)`. A's `data-broken` became `true`, `data-post-angle` was `1.347`, and `data-shot-max-x` was `20.78`. B's `data-powered` became `false`, `data-shot-ready` stayed `true`, `data-phase` stayed `combat`, and `data-result` stayed empty. B's caption read `supply dark / shell ready`.
+- B then fired a shell at about `(60, 300)`. The match stayed in combat with an empty result. B's lamp stayed dark.
+- A's lob released at about `(10, 390)`. Both seats showed `data-result=A` and `data-phase=finished`. A's `data-shot-ready` was `false` and `data-enemy-cores` was `0`. B's `data-own-core` was `false`. A's caption included `Result A.`
+- A's `data-reveal` returned to `closed`.
+- B clicked Rematch. Both seats returned to `recon` with an empty result. B's `data-powered` and `data-own-core` were `true` again, and `data-shot-ready` was `true`.
+- All 79 HTTP response bodies captured for context B were scanned. None contained `12345.67`, `-9876.54`, `87654.32`, `core-a`, or `4.25`.
+- Page errors on both contexts: none.
+
+Screenshots: `/opt/cursor/artifacts/fogshot-supply-dark.png` (B's dark lamp while the shell is still ready) and `/opt/cursor/artifacts/fogshot-result-a.png` (A's finished match, result A).
+
+The field dataset can keep the last seen `data-broken` and `data-post-angle` after rematch. Phase, the lamp, the core flags, and the server view are what reset. One core per side is this miniature match, not the four-objective economy.
+
 ## Remote
 
-`git push -u origin cursor/first-playable-66d6` updated `origin/cursor/first-playable-66d6` from `c82a33d` to `42c418d`. Both of these commits are on that remote branch:
+`git push -u origin cursor/first-playable-66d6` updated `origin/cursor/first-playable-66d6`. These commits are on that remote branch:
 
 - `4d3f4867a7a9d8fe00aa20ade906315e3a919303` drives the Phaser shot from the shared Pymunk match.
 - `42c418de2941759e6aa6d854f95f74fb4d0b028b` records that SHA in this file.
+- `4aba47fd4bf3147bb943989ec61cadcdc5564e00` records the pushed match commits.
+- `2811e0b6396e77fb6d2a392317d2e0ff6b841eee` lets a broken supply stay playable and a dead core end the match.
+- `397252ddc70e4e82ef29123a591f69c864df1301` shows the own-side supply lamp and the rematch control.
+- `13c257d3478090cf7fe0941b66828b727549f6f5` seats the live brace lower so a flat shell cannot slip under it.
 
 ## Next task
 
-Capture an unauthenticated `POST /function/join_seat` and record the HTTP 401. Persist the Pymunk pose in the pre-shot checkpoint so a restart restores the fallen post. Tie a physical break to the supply walk and show that on the page. JacHammer stays unattempted until a real remote target and credentials exist.
+Capture an unauthenticated `POST /function/join_seat` and record the HTTP 401. Persist the Pymunk pose in the pre-shot checkpoint so a restart restores the fallen post. JacHammer stays unattempted until a real remote target and credentials exist.
