@@ -74,6 +74,18 @@ A flare uses the same contact path with `deal_damage = False`, so the pin stays.
 
 `server/views.jac` builds the serialized view from an allowlist. Enemy health is sent as `-1`. Oversized revealed geometry is clipped to the reveal square. The sentinel fixture `12345.67, -9876.54` is absent from `json.dumps(view.__dict__)`. Visible rows are Python `dict` subclasses so that dump contains the same fields the caller reads as attributes. This is not yet an HTTP response capture.
 
+## Match journal
+
+```text
+JAC_TEST_STRICT=1 jac test tests/authority_tests.jac -v
+```
+
+Result: `6 passed in 1.13s`.
+
+Red run before `server/authority.jac` existed: `ModuleNotFoundError: No module named 'server.authority'`.
+
+The journal is files under a per-test temp directory (`journal.jsonl`, `seats.json`, `pending.json`). It is not the Jac graph, so unrevealed coordinates are not attached to `root`. `runtime-data/` stays gitignored. No HTTP status code was captured for this slice.
+
 ## Not claimed
 
 - No `main.jac` server is running.

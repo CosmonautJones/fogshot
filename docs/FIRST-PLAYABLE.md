@@ -48,7 +48,7 @@ Derive actual codespace annotations and scaffold paths from the selected compile
 - [x] Implement one trusted fixed-step physics driver. Jac owns the damage/break policy. Queue world mutations at solver-safe points. `physics/pymunk_driver.jac`, `physics/siege.jac`. Damage is applied once per contact pair per `simulate` call, and the pin is removed after the step.
 - [x] Establish measured limits on bodies, simulation steps, payload size, and latency. Separate simulated seconds from wall time. Recorded in [RUNTIME.md](RUNTIME.md): `dt = 1/180`, 1400 steps = 7.78 simulated seconds, three tracked bodies in the siege fixture. Payload size and browser latency are still unmeasured because there is no served match.
 - [x] Store resolved outcomes rather than claim cross-device deterministic replay. Callers keep the returned `SimOutcome`. Nothing claims the same bytes on another machine.
-- [ ] Verify, commit, and push.
+- [x] Verify, commit, and push. `f5d9486466eecd6530ae05a582b2cc998d4dcc81` on `origin/cursor/first-playable-66d6`.
 
 ## Task 4: Private views before online access
 
@@ -60,11 +60,11 @@ Derive actual codespace annotations and scaffold paths from the selected compile
 
 ## Task 5: Match authority and recovery
 
-- [ ] Bind a session to one of two seats; invitation codes are not shot authority. A third player cannot replace an occupant.
-- [ ] Test duplicate command IDs, changed payload with reused ID, stale revision, simultaneous submission, finished match, and unauthenticated access.
-- [ ] Implement one verified per-match authority boundary. Do not claim a process lock supports multiple workers.
-- [ ] Persist accepted-command journal and pre-shot checkpoint; commit one outcome and next turn consistently.
-- [ ] Test restart before and after outcome commit. Retrying must not create another shot or advance an extra turn.
+- [x] Bind a session to one of two seats; invitation codes are not shot authority. A third player cannot replace an occupant. `tests/authority_tests.jac`. Seats are player ids in this process. JWT `def:protect` binding is still open.
+- [x] Test duplicate command IDs, changed payload with reused ID, stale revision, simultaneous submission, finished match, and unauthenticated access. Simultaneous means the in-process `in_flight` flag. Unauthenticated means an empty player id, not a captured HTTP 401.
+- [x] Implement one verified per-match authority boundary. Do not claim a process lock supports multiple workers. `server/authority.jac`.
+- [x] Persist accepted-command journal and pre-shot checkpoint; commit one outcome and next turn consistently. `journal.jsonl` is the commit. `pending.json` is the checkpoint and is deleted on reload when no commit line exists. The checkpoint stores turn, revision, and shot count, not Pymunk poses.
+- [x] Test restart before and after outcome commit. Retrying must not create another shot or advance an extra turn.
 - [ ] Verify, commit, and push.
 
 ## Task 6: Playable client

@@ -22,7 +22,23 @@ Physics and scene host: `3 passed in 1.05s` on commit `17dea2255c04568aa1525d3dd
 
 Aim and rules, re-run after the combat-turn fix: `11 passed in 1.11s` on commit `dc98d6baac593541f139f17e9a82947986fd74a5` (pushed). That covers cancel, duplicate pointer, resize, device-pixel ratio, mirrored seat B, non-finite input, a short friendly-side guide, wrong actor/turn/revision, recon-only flares, combat rejecting a flare, a finished match, a win, and a draw.
 
-Siege shot and private view, this slice:
+Match journal, after the siege slice:
+
+```text
+JAC_TEST_STRICT=1 jac test tests/authority_tests.jac -v
+```
+
+Result: `6 passed in 1.13s`. The red run was `ModuleNotFoundError: No module named 'server.authority'`.
+
+- Two player ids claim seats A and B. A third id is `full`. The same id keeps its seat.
+- An empty player id cannot submit, even with the invite. That invite check is in-process. It is not an HTTP 401 yet.
+- The same command id and payload returns the stored turn and does not increment `shots`. A changed payload on that id is `conflict`.
+- `in_flight` rejects a second submit with `busy`. This is one process flag, not a lock across workers.
+- A stale revision is rejected. After both flares, `force_finished` makes the next shell `finished`.
+- `pending.json` is the pre-shot checkpoint. `fail_before_commit` leaves that file and does not append a journal line. `reload_table` deletes the pending file and stays at turn 0. A later commit reloads at turn 1, and a retry of that command id stays at one shot.
+- `look` and `journal.jsonl` omit sentinel coordinates `12345.67` and `-9876.54`.
+
+Siege shot and private view:
 
 ```text
 JAC_TEST_STRICT=1 jac test tests/siege_view_tests.jac tests/physics_driver_tests.jac -v
@@ -48,11 +64,12 @@ Details, the Pymunk `::py::` import seam, and the commands are in [RUNTIME.md](R
 - Direct `import pymunk` does not compile on Jac 0.37.23 (E1030 on `Body.angle.setter`). The solver is still Pymunk, loaded through `_pymunk()`.
 - The measured 0.15 / power-14 shell from launcher A lands at the midline. A post at x=24 is past that landing, so the siege fixture places the target at x=20. This is not a claim that every legal aim reaches the far base.
 - The view test serializes the projection object. It does not yet inspect HTTP replay, error, polling, or reconnect bytes.
-- No match store, supply graph, or two-client session has been implemented or tested.
+- The match journal stores seats, rules, and a shot count. It does not yet store a Pymunk body snapshot, and it does not serve `def:protect` over HTTP.
+- No supply graph or two-client session has been implemented or tested.
 - JacHammer deployment has not been attempted.
 - `jac check` on the driver warns `W1037` for explicit `any` at the solver boundary.
 - Outcomes are the in-memory `SimOutcome` from one process. That is not a cross-device deterministic replay.
 
 ## Next task
 
-Bind two authenticated seats to one match, persist an accepted-command journal and pre-shot checkpoint, and reject duplicate command ids, stale revisions, a third occupant, and an invite code used as shot authority. Restart from the journal must not fire the shot twice.
+Serve the journal through authenticated `def:protect` endpoints and prove an unauthenticated call is rejected with HTTP 401. Then render the authoritative view in Phaser: pull-back, projectile, braced post, fog, and a temporary reveal, with two browser sessions that do not receive the sentinel coordinates.
