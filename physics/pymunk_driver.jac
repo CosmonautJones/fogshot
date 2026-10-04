@@ -223,10 +223,10 @@ obj PhysicsWorld {
         ));
     }
 
-    def add_braced_post(body_id: str, x: float, base_y: float, w: float, h: float, lean: float, health: float) -> None {
+    def add_braced_post(body_id: str, x: float, base_y: float, w: float, h: float, lean: float, health: float, clearance: float = 0.35) -> None {
         self.ensure();
         # Keep the pivot clear of the ground segment so the solver cannot jam the hinge.
-        pivot_y = base_y + 0.35;
+        pivot_y = base_y + clearance;
         mass = 1.2;
         moment = _pymunk().moment_for_box(mass, (w, h));
         body = _pymunk().Body(mass, moment) as any;

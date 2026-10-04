@@ -46,7 +46,9 @@ def _arm(live: LiveMatch) -> None {
     # That shell breaks the braced mast. The static core at (11.2, 2.6)
     # sits above that roll and stays alive until the higher shell.
     # The siege fixture (x=20, health 4, angle 0.15, power 14) is unchanged.
-    world.add_braced_post("enemy-post", 21.0, 0.0, 0.14, 3.2, 0.22, 0.5);
+    # Clearance 0.22 keeps a flat shell on the post. The 0.35 siege pivot
+    # lets a fraction of a degree slip underneath that thin brace.
+    world.add_braced_post("enemy-post", 21.0, 0.0, 0.14, 3.2, 0.22, 0.5, 0.22);
     world.add_static_box("core-b", 11.2, 2.6, 0.8, 0.8, 0.4);
     world.add_static_box("core-a", 4.25, 3.25, 0.8, 0.8, 0.4);
     live.world = world;
