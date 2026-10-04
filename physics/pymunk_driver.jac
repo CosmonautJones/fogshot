@@ -22,9 +22,24 @@ def _world_pair(body, local_xy):
 def _pose(body):
     return (float(body.position.x), float(body.position.y), float(body.angle))
 
+def _motion(body):
+    vel = body.velocity
+    return (float(vel.x), float(vel.y), float(body.angular_velocity))
+
+def _place(body, x, y, angle, vx, vy, ang_vel):
+    body.position = (float(x), float(y))
+    body.angle = float(angle)
+    body.velocity = (float(vx), float(vy))
+    body.angular_velocity = float(ang_vel)
+
 def _impulse(arbiter):
     imp = arbiter.total_impulse
     return float((imp.x * imp.x + imp.y * imp.y) ** 0.5)
+
+def _drop(space, body, shape, pin):
+    if pin is not None:
+        space.remove(pin)
+    space.remove(body, shape)
 ::py::
 
 obj BodyState {
@@ -34,6 +49,11 @@ obj BodyState {
     has angle: float;
     has broken: bool = False;
     has alive: bool = True;
+    has applications: int = 0;
+    has health: float = 0.0;
+    has vx: float = 0.0;
+    has vy: float = 0.0;
+    has ang_vel: float = 0.0;
 }
 
 obj SimOutcome {
@@ -65,6 +85,12 @@ obj Tracked {
     has broken: bool = False;
     has pin: any = None;
     has kind: str = "dynamic";
+    has applications: int = 0;
+    has hinged: bool = False;
+    has pin_ax: float = 0.0;
+    has pin_ay: float = 0.0;
+    has pin_bx: float = 0.0;
+    has pin_by: float = 0.0;
 }
 
 def _post_solve(arbiter: any, _space: any, data: any) -> None {
@@ -79,6 +105,7 @@ obj PhysicsWorld {
     has damaged: list[str] = [];
     has pending: list[tuple[str, str, float]] = [];
     has dt: float = 1.0 / 180.0;
+    has deal_damage: bool = True;
 
     def ensure() -> None {
         if self.space is not None {
@@ -165,8 +192,9 @@ obj PhysicsWorld {
         shape.fog_id = body_id;
         self.space.add(body, shape);
         anchor = self.space.static_body;
+        top = _world_pair(body, (0.0, h / 2.0)) as tuple[float, float];
         pivot = _pymunk().PivotJoint(anchor, body, _world_pair(body, (0.0, -h / 2.0)));
-        pin = _pymunk().PinJoint(anchor, body, _world_pair(body, (0.0, h / 2.0)), (0.0, h / 2.0));
+        pin = _pymunk().PinJoint(anchor, body, top, (0.0, h / 2.0));
         self.space.add(pivot, pin);
         self.tracks.append(Tracked(
             id=body_id,
@@ -174,7 +202,12 @@ obj PhysicsWorld {
             body=body,
             shape=shape,
             health=health,
-            pin=pin
+            pin=pin,
+            hinged=True,
+            pin_ax=top[0],
+            pin_ay=top[1],
+            pin_bx=0.0,
+            pin_by=h / 2.0
         ));
     }
 
@@ -213,10 +246,14 @@ obj PhysicsWorld {
     }
 
     def hurt(body_id: str, amount: float) -> None {
+        if not self.deal_damage {
+            return;
+        }
         track = self.find(body_id);
         if track is None or track.role == "projectile" {
             return;
         }
+        track.applications = track.applications + 1;
         track.health = track.health - amount;
         if track.health <= 0.0 and not track.broken {
             if track.pin is not None {
@@ -227,18 +264,85 @@ obj PhysicsWorld {
         }
     }
 
+    def read_state(track: Tracked) -> BodyState {
+        pose = _pose(track.body) as tuple[float, float, float];
+        motion = _motion(track.body) as tuple[float, float, float];
+        return BodyState(
+            id=track.id,
+            x=pose[0],
+            y=pose[1],
+            angle=pose[2],
+            broken=track.broken,
+            alive=True,
+            applications=track.applications,
+            health=track.health,
+            vx=motion[0],
+            vy=motion[1],
+            ang_vel=motion[2]
+        );
+    }
+
+    def capture() -> list[BodyState] {
+        saved: list[BodyState] = [];
+        for track in self.tracks {
+            saved.append(self.read_state(track));
+        }
+        return saved;
+    }
+
+    def restore(saved: list[BodyState]) -> None {
+        self.ensure();
+        keep: list[str] = [];
+        for item in saved {
+            keep.append(item.id);
+        }
+        removed: list[Tracked] = [];
+        for track in self.tracks {
+            if track.id not in keep {
+                removed.append(track);
+            }
+        }
+        for track in removed {
+            _drop(self.space, track.body, track.shape, track.pin);
+            track.pin = None;
+        }
+        kept: list[Tracked] = [];
+        for track in self.tracks {
+            if track.id in keep {
+                kept.append(track);
+            }
+        }
+        self.tracks = kept;
+        for item in saved {
+            track = self.find(item.id);
+            if track is None {
+                continue;
+            }
+            _place(track.body, item.x, item.y, item.angle, item.vx, item.vy, item.ang_vel);
+            track.health = item.health;
+            track.broken = item.broken;
+            track.applications = item.applications;
+            if item.broken and track.pin is not None {
+                self.space.remove(track.pin);
+                track.pin = None;
+            }
+            if not item.broken and track.pin is None and track.hinged {
+                fresh = _pymunk().PinJoint(
+                    self.space.static_body,
+                    track.body,
+                    (track.pin_ax, track.pin_ay),
+                    (track.pin_bx, track.pin_by)
+                );
+                self.space.add(fresh);
+                track.pin = fresh;
+            }
+        }
+    }
+
     def snapshot(steps: int) -> SimOutcome {
         states: list[BodyState] = [];
         for track in self.tracks {
-            pose = _pose(track.body) as tuple[float, float, float];
-            states.append(BodyState(
-                id=track.id,
-                x=pose[0],
-                y=pose[1],
-                angle=pose[2],
-                broken=track.broken,
-                alive=True
-            ));
+            states.append(self.read_state(track));
         }
         copied: list[str] = [pair for pair in self.pairs];
         return SimOutcome(steps=steps, pairs=copied, bodies=states);

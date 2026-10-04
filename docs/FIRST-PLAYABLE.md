@@ -1,7 +1,7 @@
 # First playable implementation plan
 
 Date: 2026-10-04
-Status: Not implemented. All product tasks below remain open.
+Status: Tasks 1 and 2 are pushed. Task 3 physics behaviors pass locally in `tests/siege_view_tests.jac` and `tests/physics_driver_tests.jac`. No browser match yet.
 
 ## Target
 
@@ -33,21 +33,21 @@ Derive actual codespace annotations and scaffold paths from the selected compile
 - [x] Establish tests for scene mount/dispose/remount without duplicate handlers and for a real server-side collision and rotating support collapse. `tests/scene_host_tests.jac`, `tests/physics_driver_tests.jac`.
 - [x] Prove those tests fail for the intended missing behavior, then implement. Missing modules failed under `JAC_TEST_STRICT=1` with `ModuleNotFoundError`. Direct `import pymunk` does not compile (E1030 on `Body.angle.setter`); the driver loads Pymunk through a `::py::` seam and keeps break policy in Jac. `Space.on_collision` is the Pymunk 7 callback. Phaser itself is not mounted yet.
 - [x] Run the actual check and test commands; record them in docs/RUNTIME.md. `jac build` has not been run. There is no servable `main.jac` yet.
-- [ ] Commit and push the verified runtime slice. Do that only after the push command succeeds.
+- [x] Commit and push the verified runtime slice. `17dea2255c04568aa1525d3dd1d2e50577ef1415` on `origin/cursor/first-playable-66d6`.
 
 ## Task 2: Input and pure rules
 
 - [x] Test drag cancel, duplicate pointer events, resize/device-pixel ratio, mirrored aim, finite input validation, wrong phase/turn/actor, and victory/draw. `tests/aim_rules_tests.jac`, 11 passed.
 - [x] Implement pure Jac input conversion and explicit rules. Fixed gravity, no wind or spread, and a short guide that stops at the midline without a collision query. `game/aim.jac`, `game/rules.jac`.
 - [ ] Typed private checkpoint, private physics result, public player view, and public replay are still task 4. Shot command fields are the `accept_shot` parameters (actor, revision, turn, weapon, angle, power). A command id belongs with match authority.
-- [ ] Commit and push this slice. Check this only after the push command succeeds.
+- [x] Commit and push this slice. `dc98d6baac593541f139f17e9a82947986fd74a5` on `origin/cursor/first-playable-66d6`.
 
 ## Task 3: Actual physics
 
-- [ ] Test projectile contact against thin supports, support break causing a fall, contact damage applied once, bounded debris settling, and checkpoint restore.
-- [ ] Implement one trusted fixed-step physics driver. Jac owns the damage/break policy. Queue world mutations at solver-safe points.
-- [ ] Establish measured limits on bodies, simulation steps, payload size, and latency. Separate simulated seconds from wall time.
-- [ ] Store resolved outcomes rather than claim cross-device deterministic replay.
+- [x] Test projectile contact against thin supports, support break causing a fall, contact damage applied once, bounded debris settling, and checkpoint restore. `tests/physics_driver_tests.jac` and `tests/siege_view_tests.jac`. The step budget is the settle bound: shell and flare runs assert `steps == 1400`.
+- [x] Implement one trusted fixed-step physics driver. Jac owns the damage/break policy. Queue world mutations at solver-safe points. `physics/pymunk_driver.jac`, `physics/siege.jac`. Damage is applied once per contact pair per `simulate` call, and the pin is removed after the step.
+- [x] Establish measured limits on bodies, simulation steps, payload size, and latency. Separate simulated seconds from wall time. Recorded in [RUNTIME.md](RUNTIME.md): `dt = 1/180`, 1400 steps = 7.78 simulated seconds, three tracked bodies in the siege fixture. Payload size and browser latency are still unmeasured because there is no served match.
+- [x] Store resolved outcomes rather than claim cross-device deterministic replay. Callers keep the returned `SimOutcome`. Nothing claims the same bytes on another machine.
 - [ ] Verify, commit, and push.
 
 ## Task 4: Private views before online access

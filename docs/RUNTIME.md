@@ -48,6 +48,32 @@ Result: `3 passed in 1.05s`
 
 `JAC_TEST_STRICT=1` matters. Without it, Jac 0.37 treats a missing local import such as `physics` as an optional dependency and **skips** the file with exit 0. The strict run is the one that failed with `ModuleNotFoundError: No module named 'physics'` before `physics/pymunk_driver.jac` existed.
 
+## Siege shot and allowlist view
+
+```text
+JAC_TEST_STRICT=1 jac test tests/siege_view_tests.jac tests/physics_driver_tests.jac -v
+```
+
+Result: `7 passed in 0.84s`.
+
+The red run, after renaming the Jac keyword `own`, was `ModuleNotFoundError: No module named 'physics.siege'`.
+
+Measured range for angle `0.15`, power `14`, start `(6, 4)`, radius `0.16`, gravity `(0, -9.81)`, damping `0.85`:
+
+| Quantity | Value |
+|---|---|
+| Fixed step | `1/180` s |
+| Shell and flare budget | 1400 steps, 7.78 simulated seconds |
+| Bodies | 1 static ground segment, 1 braced post, 1 projectile |
+| Post | base x=20 (midline), width 0.14 m, height 3.2 m, lean 0.22 rad, health 4 |
+| First shell impulse | about 4.4, enough to break health 4 once |
+| Far post | x=24 is past this shot's landing and was not used |
+| Wall time | the seven-test command above finished in 0.84 s |
+
+A flare uses the same contact path with `deal_damage = False`, so the pin stays. `capture` / `restore` rewrites pose, health, and the pin, and removes tracks that were not in the snapshot.
+
+`server/views.jac` builds the serialized view from an allowlist. Enemy health is sent as `-1`. Oversized revealed geometry is clipped to the reveal square. The sentinel fixture `12345.67, -9876.54` is absent from `json.dumps(view.__dict__)`. Visible rows are Python `dict` subclasses so that dump contains the same fields the caller reads as attributes. This is not yet an HTTP response capture.
+
 ## Not claimed
 
 - No `main.jac` server is running.
