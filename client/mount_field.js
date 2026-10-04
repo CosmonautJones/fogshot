@@ -39,15 +39,31 @@ function drawBodies(pen, bodies, color) {
         if (center.x < -40 || center.x > VIEW_W + 40) {
             continue;
         }
-        const height = Math.max(48, (body.h / ARENA_H) * VIEW_H);
-        const width = Math.max(14, (body.w / ARENA_W) * VIEW_W);
         pen.save();
         pen.translateCanvas(center.x, center.y);
         pen.rotateCanvas(-body.angle);
-        pen.fillStyle(color, 1);
-        pen.fillRect(-width / 2, -height / 2, width, height);
+        if (body.role === "core") {
+            const size = Math.max(22, (body.w / ARENA_W) * VIEW_W);
+            pen.fillStyle(body.alive === false ? 0x4a4038 : 0xe7c27a, 1);
+            pen.fillRect(-size / 2, -size / 2, size, size);
+        } else {
+            const height = Math.max(48, (body.h / ARENA_H) * VIEW_H);
+            const width = Math.max(14, (body.w / ARENA_W) * VIEW_W);
+            pen.fillStyle(color, 1);
+            pen.fillRect(-width / 2, -height / 2, width, height);
+        }
         pen.restore();
     }
+}
+
+function drawLamp(pen, scene) {
+    const x = scene.seat === "B" ? 720 : 80;
+    const y = 36;
+    const powered = scene.powered !== false;
+    pen.fillStyle(powered ? 0xf2d48a : 0x1a1f27, 1);
+    pen.fillCircle(x, y, 11);
+    pen.lineStyle(3, powered ? 0xf2d48a : 0x5c6770, 1);
+    pen.strokeCircle(x, y, 18);
 }
 
 function launcherOf(scene) {
@@ -77,6 +93,7 @@ function paint(scene, pull) {
     }
     drawBodies(pen, ownBodies(scene.view), 0xc4a574);
     drawBodies(pen, revealedBodies(scene.view), 0xd27a5a);
+    drawLamp(pen, scene);
     const launch = launcherOf(scene);
     scene.launch = launch;
     pen.fillStyle(0xd7e2ea, 1);
@@ -97,6 +114,11 @@ function remember(parent, data) {
     parent.dataset.phase = data.phase || "";
     parent.dataset.weapon = data.weapon || "";
     parent.dataset.reveal = data.view && data.view.reveal ? "open" : "closed";
+    parent.dataset.powered = data.own_powered === false ? "false" : "true";
+    parent.dataset.shotReady = data.shot_ready === false ? "false" : "true";
+    parent.dataset.result = data.result || "";
+    parent.dataset.enemyCores = data.enemy_cores === undefined ? "" : String(data.enemy_cores);
+    parent.dataset.ownCore = data.own_core === false ? "false" : "true";
     const seeing = Boolean(data.view && data.view.reveal) || Boolean(data.broken);
     if (seeing && typeof data.angle === "number") {
         parent.dataset.postAngle = String(data.angle);
@@ -137,6 +159,7 @@ export function mountField(parent) {
                 this.shot = null;
                 this.view = null;
                 this.seat = "";
+                this.powered = true;
                 this.path = null;
                 this.pathIndex = 0;
                 paint(this, null);
@@ -212,6 +235,9 @@ export function mountField(parent) {
             sceneRef.view = data.view || sceneRef.view;
             if (data.seat) {
                 sceneRef.seat = data.seat;
+            }
+            if (typeof data.own_powered === "boolean") {
+                sceneRef.powered = data.own_powered;
             }
             if (data.path && data.path.length) {
                 sceneRef.path = data.path;

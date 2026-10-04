@@ -3,7 +3,7 @@
 import from "react" { useEffect }
 import from "@jac/runtime" { SignupResult, jacLogin, jacSignup }
 import from "./mount_field.js" { mountField }
-import from server.live { join_seat, loose_shot, watch_match }
+import from server.live { join_seat, loose_shot, play_again, watch_match }
 
 glob INVITE: str = "fogshot";
 glob PASSWORD: str = "fogshot-seat";
@@ -32,11 +32,35 @@ def _note(raw: str) -> None {
         return;
     }
     parsed = JSON.parse(raw) as any;
-    text = "Seat " + str(parsed.seat) + " / " + str(parsed.phase) + " / " + str(parsed.weapon) + ". Pull back from the launcher. The shot is the server result.";
+    supply = "on" if parsed.own_powered != False else "dark";
+    shell = "ready" if parsed.shot_ready != False else "held";
+    text = "Seat " + str(parsed.seat) + " / " + str(parsed.phase) + " / " + str(parsed.weapon) + " / supply " + supply + " / shell " + shell + ". Pull back from the launcher. The shot is the server result.";
+    if parsed.result {
+        text = text + " Result " + str(parsed.result) + ".";
+    }
     if parsed.code {
         text = text + " (" + str(parsed.code) + ")";
     }
     _set_caption.call(None, text);
+}
+
+async def _again() -> None {
+    if not _joined {
+        return;
+    }
+    raw: str = "";
+    try {
+        raw = await play_again(INVITE);
+    } except Exception {
+        if _set_caption {
+            _set_caption.call(None, "Rematch was rejected.");
+        }
+        return;
+    }
+    if _apply {
+        _apply.call(None, raw);
+    }
+    _note(raw);
 }
 
 async def _join() -> None {
@@ -150,6 +174,19 @@ def:pub Battlefield -> JsxElement {
     }}>
         <h1 style={{"fontSize": "1.4rem", "margin": "0 0 0.4rem"}}>Fogshot</h1>
         <p>{caption}</p>
+        <button
+            id="fogshot-rematch"
+            onClick={lambda (event: any) { _again(); }}
+            style={{
+                "margin": "0 0 0.8rem",
+                "background": "#243044",
+                "color": "#e7eef2",
+                "border": "1px solid #8fd0c6",
+                "padding": "0.4rem 0.8rem"
+            }}
+        >
+            Rematch
+        </button>
         <div id="fogshot-field" style={{"width": "800px", "height": "400px"}}></div>
     </section>
 }
