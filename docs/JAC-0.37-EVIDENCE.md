@@ -194,5 +194,5 @@ handler names on the field element (`pointerdown`, `pointermove`,
   were available. Do not treat `jac run` on localhost as a deployment.
 - Outcomes from one process are not a cross-device deterministic replay.
 
-Ingest this file with `python -m jacbrain ingest examples/fogshot-jac-0.37.23.md --project fogshot`.
+When jacbrain is writable, ingest this file with `python -m jacbrain ingest docs/JAC-0.37-EVIDENCE.md --project fogshot`.
 Do not ingest `.jacbrain` SQLite databases, seat tokens, or `runtime-data/`.
