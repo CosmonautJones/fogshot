@@ -381,24 +381,19 @@ def _apply_hit(live: LiveMatch, outcome: SimOutcome, weapon: str) -> None {
     }
 }
 
-def _reveal_on(live: LiveMatch, outcome: SimOutcome, seat: str, now_ms: int) -> None {
-    target = "";
-    if seat == "A" and outcome.contacted("shot", "core-b") {
-        target = "core-b";
-    } elif seat == "B" and outcome.contacted("shot", "core-a") {
-        target = "core-a";
-    } elif outcome.contacted("shot", "enemy-post") {
-        target = "enemy-post";
-    }
-    if target == "" {
+def _reveal_on(live: LiveMatch, outcome: SimOutcome, seat: str, now_ms: int, weapon: str) -> None {
+    if live.world.strike_step >= 0 {
+        live.reveal_x = live.world.strike_x;
+        live.reveal_y = live.world.strike_y;
+    } elif live.world.impact_step >= 0 {
+        live.reveal_x = live.world.impact_x;
+        live.reveal_y = live.world.impact_y;
+    } else {
         return;
     }
-    hit = outcome.body(target);
     live.reveal_seat = seat;
     live.reveal_until = server_now() + 3000;
-    live.reveal_x = hit.x;
-    live.reveal_y = hit.y;
-    live.reveal_radius = 4.0;
+    live.reveal_radius = 3.0 if weapon == "flare" else 2.2;
 }
 
 def _post_in_patch(live: LiveMatch) -> bool {
@@ -463,6 +458,9 @@ def _encode(
         "angle": shown_angle,
         "path": path,
         "reveal_until": expiry,
+        "reveal_x": live.reveal_x if opened else 0.0,
+        "reveal_y": live.reveal_y if opened else 0.0,
+        "reveal_radius": live.reveal_radius if opened else 0.0,
         "result": live.table.rules.result,
         "own_powered": _powered(live, seat),
         "shot_ready": _ready(live),
@@ -515,7 +513,7 @@ def _launch(
     outcome = live.world.simulate(max_steps=1400);
     _apply_hit(live, outcome, weapon);
     if reveal {
-        _reveal_on(live, outcome, seat, now_ms);
+        _reveal_on(live, outcome, seat, now_ms, weapon);
     }
 }
 

@@ -38,9 +38,11 @@ test "client time cannot extend or reopen a reveal" {
     pin_clock(20000);
     flare_b = json.loads(take_shot(live, "player-b", "flare-b", 60.0, 300.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "flare"));
     assert flare_b["ok"];
-    # B's short flare does not reach a structure, so it must not keep A's deadline or use client time 0.
-    assert flare_b["reveal_until"] == 0;
-    assert flare_b["view"]["reveal"] is None;
+    # B's short flare misses the post and scouts the ground. The deadline is the server clock.
+    assert flare_b["reveal_until"] == 23000;
+    assert flare_b["view"]["reveal"] is not None;
+    assert "core-a" not in json.dumps(flare_b);
+    assert "4.25" not in json.dumps(flare_b);
     pin_clock(30000);
     opened = json.loads(take_shot(live, "player-a", "shell-a", 20.0, 300.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "shell"));
     assert opened["ok"];

@@ -85,7 +85,8 @@ test "a miss still returns the projectile path and hides the enemy core" {
     assert missed["result"] == "";
     assert not missed["broken"];
     assert len(missed["path"]) > 3;
-    assert missed["view"]["reveal"] is None;
+    assert missed["view"]["reveal"] is not None;
+    assert missed["reveal_radius"] == 2.2;
     assert "enemy-post" not in missed_raw;
     assert "core-b" not in missed_raw;
     assert "12345.67" not in missed_raw;

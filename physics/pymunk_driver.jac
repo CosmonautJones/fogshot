@@ -36,6 +36,19 @@ def _impulse(arbiter):
     imp = arbiter.total_impulse
     return float((imp.x * imp.x + imp.y * imp.y) ** 0.5)
 
+def _contact_point(arbiter):
+    points = arbiter.contact_point_set.points
+    if not points:
+        return (0.0, 0.0, False)
+    point = points[0].point_a
+    return (float(point.x), float(point.y), True)
+
+def _hits_structure(arbiter):
+    for shape in arbiter.shapes:
+        if int(shape.collision_type) == 2:
+            return True
+    return False
+
 def _drop(space, body, shape, pin):
     if pin is not None:
         space.remove(pin)
@@ -123,6 +136,13 @@ obj PhysicsWorld {
     has dt: float = 1.0 / 180.0;
     has deal_damage: bool = True;
     has trace: list[float] = [];
+    has impact_x: float = 0.0;
+    has impact_y: float = 0.0;
+    has impact_step: int = -1;
+    has strike_x: float = 0.0;
+    has strike_y: float = 0.0;
+    has strike_step: int = -1;
+    has step_index: int = 0;
 
     def ensure() -> None {
         if self.space is not None {
@@ -136,6 +156,7 @@ obj PhysicsWorld {
         self.damaged = [];
         self.pending = [];
         self.space.on_collision(3, 2, post_solve=_post_solve, data={"world": self});
+        self.space.on_collision(3, 1, post_solve=_post_solve, data={"world": self});
         self.trace = [];
     }
 
@@ -270,6 +291,19 @@ obj PhysicsWorld {
         a = str(shapes[0].fog_id);
         b = str(shapes[1].fog_id);
         key = a + "|" + b if a < b else b + "|" + a;
+        if self.impact_step < 0 or self.strike_step < 0 {
+            point = _contact_point(arbiter) as tuple[float, float, bool];
+            if point[2] and self.impact_step < 0 {
+                self.impact_x = point[0];
+                self.impact_y = point[1];
+                self.impact_step = self.step_index;
+            }
+            if point[2] and self.strike_step < 0 and _hits_structure(arbiter) as bool {
+                self.strike_x = point[0];
+                self.strike_y = point[1];
+                self.strike_step = self.step_index;
+            }
+        }
         if key not in self.pairs {
             self.pairs.append(key);
         }
@@ -414,8 +448,15 @@ obj PhysicsWorld {
         self.damaged = [];
         self.pending = [];
         self.trace = [];
+        self.impact_step = -1;
+        self.impact_x = 0.0;
+        self.impact_y = 0.0;
+        self.strike_step = -1;
+        self.strike_x = 0.0;
+        self.strike_y = 0.0;
         steps = 0;
         while steps < max_steps {
+            self.step_index = steps;
             self.space.step(self.dt);
             steps = steps + 1;
             self.flush();
