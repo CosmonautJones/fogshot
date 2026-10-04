@@ -3,6 +3,7 @@
 // post pose, and reveal bodies come from the server payload. This file does
 // not integrate a shot or decide a hit.
 import { AUTO, Game } from "phaser";
+import { isStale, releaseAllowed, sampleAt, sameSeries } from "./playback.js";
 
 const ARENA_W = 40;
 const ARENA_H = 16;
@@ -30,7 +31,7 @@ function revealedBodies(view) {
     return view.reveal.bodies;
 }
 
-function drawBodies(pen, bodies, color) {
+function drawBodies(pen, bodies, color, collapseAngle) {
     for (const body of bodies) {
         if (body.role === "ground" || body.role === "marker" || body.role === "launcher") {
             continue;
@@ -39,9 +40,10 @@ function drawBodies(pen, bodies, color) {
         if (center.x < -40 || center.x > VIEW_W + 40) {
             continue;
         }
+        const angle = body.role === "post" && typeof collapseAngle === "number" ? collapseAngle : body.angle;
         pen.save();
         pen.translateCanvas(center.x, center.y);
-        pen.rotateCanvas(-body.angle);
+        pen.rotateCanvas(-angle);
         if (body.role === "core") {
             const size = Math.max(22, (body.w / ARENA_W) * VIEW_W);
             pen.fillStyle(body.alive === false ? 0x4a4038 : 0xe7c27a, 1);
@@ -91,8 +93,8 @@ function paint(scene, pull) {
     } else {
         pen.fillRect(VIEW_W / 2, 0, VIEW_W / 2, VIEW_H);
     }
-    drawBodies(pen, ownBodies(scene.view), 0xc4a574);
-    drawBodies(pen, revealedBodies(scene.view), 0xd27a5a);
+    drawBodies(pen, ownBodies(scene.view), 0xc4a574, scene.collapseAngle);
+    drawBodies(pen, revealedBodies(scene.view), 0xd27a5a, scene.collapseAngle);
     drawLamp(pen, scene);
     const launch = launcherOf(scene);
     scene.launch = launch;
@@ -119,6 +121,9 @@ function remember(parent, data) {
     parent.dataset.result = data.result || "";
     parent.dataset.enemyCores = data.enemy_cores === undefined ? "" : String(data.enemy_cores);
     parent.dataset.ownCore = data.own_core === false ? "false" : "true";
+    parent.dataset.yourTurn = data.your_turn ? "true" : "false";
+    parent.dataset.epoch = data.epoch === undefined ? "" : String(data.epoch);
+    parent.dataset.revision = data.revision === undefined ? "" : String(data.revision);
     const seeing = Boolean(data.view && data.view.reveal) || Boolean(data.broken);
     if (data.phase === "recon") {
         parent.dataset.broken = "false";
@@ -164,14 +169,59 @@ export function mountField(parent) {
                 this.seat = "";
                 this.powered = true;
                 this.path = null;
-                this.pathIndex = 0;
+                this.pathStart = null;
+                this.collapse = null;
+                this.collapseAngle = null;
+                this.epoch = 0;
+                this.revision = 0;
+                this.input.addPointer(2);
+                let activeId = null;
+                const finishPull = (pointer, outside) => {
+                    if (!pull || pointer.id !== activeId) {
+                        return;
+                    }
+                    const release = { x: pointer.x, y: pointer.y };
+                    const yourTurn = Boolean(parent && parent.dataset.yourTurn === "true");
+                    const allowed = releaseAllowed({
+                        yourTurn,
+                        outside,
+                        extraPointer: false,
+                        cancelled: outside,
+                    });
+                    pull = null;
+                    activeId = null;
+                    paint(this, null);
+                    if (!allowed) {
+                        if (parent) {
+                            parent.dataset.cancelled = "true";
+                        }
+                        return;
+                    }
+                    if (parent) {
+                        parent.dataset.cancelled = "false";
+                        parent.dataset.pulls = String(Number(parent.dataset.pulls || 0) + 1);
+                        parent.dataset.releaseX = String(release.x);
+                        parent.dataset.releaseY = String(release.y);
+                    }
+                    const fire = window.fogshotFire;
+                    if (fire) {
+                        fire(release.x, release.y);
+                    }
+                };
                 paint(this, null);
                 this.input.on(handlers[0], (pointer) => {
+                    if (pull) {
+                        if (parent) {
+                            parent.dataset.extraPointer = "true";
+                        }
+                        return;
+                    }
+                    activeId = pointer.id;
                     pull = { x: pointer.x, y: pointer.y };
                     paint(this, pull);
                 });
                 this.input.on(handlers[1], (pointer) => {
-                    if (!pull) {
+                    if (!pull || pointer.id !== activeId) {
                         return;
                     }
                     pull = { x: pointer.x, y: pointer.y };
@@ -182,35 +232,36 @@ export function mountField(parent) {
                     paint(this, pull);
                 });
                 this.input.on(handlers[2], (pointer) => {
-                    if (!pull) {
-                        return;
-                    }
-                    const release = { x: pointer.x, y: pointer.y };
-                    pull = null;
-                    paint(this, null);
-                    if (parent) {
-                        parent.dataset.pulls = String(Number(parent.dataset.pulls || 0) + 1);
-                        parent.dataset.releaseX = String(release.x);
-                        parent.dataset.releaseY = String(release.y);
-                    }
-                    const fire = window.fogshotFire;
-                    if (fire) {
-                        fire(release.x, release.y);
-                    }
+                    const outside = pointer.x < 0 || pointer.y < 0 || pointer.x > VIEW_W || pointer.y > VIEW_H;
+                    finishPull(pointer, outside);
+                });
+                this.input.on("pointerupoutside", (pointer) => {
+                    finishPull(pointer, true);
                 });
             },
-            update() {
+            update(time) {
                 const path = this.path;
-                if (!path || this.pathIndex >= path.length) {
+                if (!path || !path.length) {
                     return;
                 }
-                const point = path[this.pathIndex];
+                if (this.pathStart === null) {
+                    this.pathStart = time;
+                }
+                const elapsed = (time - this.pathStart) / 1000;
+                const point = sampleAt(path, elapsed, 2);
+                if (!point) {
+                    return;
+                }
                 this.shot = worldToScreen(point[0], point[1]);
-                this.pathIndex += 1;
+                const falling = sampleAt(this.collapse, elapsed, 1);
+                if (falling) {
+                    this.collapseAngle = falling[0];
+                }
                 if (parent) {
                     parent.dataset.shotScreenX = String(this.shot.x);
+                    parent.dataset.shotTime = String(point[2]);
                 }
-                paint(this, null);
+                paint(this, pull);
             },
         },
     });
@@ -235,6 +286,21 @@ export function mountField(parent) {
             if (!data || typeof data !== "object") {
                 return;
             }
+            if (isStale(sceneRef, data)) {
+                return;
+            }
+            const nextEpoch = data.epoch === undefined ? sceneRef.epoch : data.epoch;
+            if (nextEpoch !== sceneRef.epoch) {
+                sceneRef.path = null;
+                sceneRef.collapse = null;
+                sceneRef.collapseAngle = null;
+                sceneRef.shot = null;
+                sceneRef.pathStart = null;
+            }
+            sceneRef.epoch = nextEpoch;
+            if (data.revision !== undefined) {
+                sceneRef.revision = data.revision;
+            }
             sceneRef.view = data.view || sceneRef.view;
             if (data.seat) {
                 sceneRef.seat = data.seat;
@@ -242,10 +308,14 @@ export function mountField(parent) {
             if (typeof data.own_powered === "boolean") {
                 sceneRef.powered = data.own_powered;
             }
-            if (data.path && data.path.length) {
+            if (data.path && data.path.length && !sameSeries(sceneRef.path, data.path)) {
                 sceneRef.path = data.path;
-                sceneRef.pathIndex = 0;
+                sceneRef.pathStart = null;
                 sceneRef.shot = worldToScreen(data.path[0][0], data.path[0][1]);
+            }
+            if (data.collapse && data.collapse.length && !sameSeries(sceneRef.collapse, data.collapse)) {
+                sceneRef.collapse = data.collapse;
+                sceneRef.collapseAngle = data.collapse[0][0];
             }
             remember(parent, data);
             paint(sceneRef, pull);

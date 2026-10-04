@@ -71,6 +71,8 @@ obj LiveMatch {
     has core_a_alive: bool = True;
     has core_b_alive: bool = True;
     has refused: bool = False;
+    has shot_path: list[list[float]] = [];
+    has shot_collapse: list[list[float]] = [];
 }
 
 glob _shared: LiveMatch | None = None;
@@ -215,6 +217,8 @@ def _save_canonical(live: LiveMatch, fail: bool) -> None {
         "reveal_radius": live.reveal_radius,
         "mast_a": intact_a,
         "mast_b": intact_b,
+        "shot_path": live.shot_path,
+        "shot_collapse": live.shot_collapse,
         "bodies": bodies
     });
     _replace_file(_canonical_path(live.table.directory), text, fail);
@@ -282,6 +286,19 @@ def _load_canonical(live: LiveMatch) -> bool {
     live.reveal_x = float(data["reveal_x"]);
     live.reveal_y = float(data["reveal_y"]);
     live.reveal_radius = float(data["reveal_radius"]);
+    live.shot_path = [];
+    live.shot_collapse = [];
+    try {
+        for point in data["shot_path"] {
+            live.shot_path.append([float(point[0]), float(point[1]), float(point[2])]);
+        }
+        for sample in data["shot_collapse"] {
+            live.shot_collapse.append([float(sample[0]), float(sample[1])]);
+        }
+    } except Exception {
+        live.shot_path = [];
+        live.shot_collapse = [];
+    }
     return True;
 }
 
@@ -409,14 +426,89 @@ def _post_in_patch(live: LiveMatch) -> bool {
     return False;
 }
 
+def _bound(points: list[list[float]], limit: int) -> list[list[float]] {
+    if len(points) <= limit {
+        return points;
+    }
+    kept: list[list[float]] = [];
+    step = len(points) // limit;
+    if step < 1 {
+        step = 1;
+    }
+    index = 0;
+    while index < len(points) and len(kept) < limit {
+        kept.append(points[index]);
+        index = index + step;
+    }
+    return kept;
+}
+
 def _path_of(live: LiveMatch) -> list[list[float]] {
     points: list[list[float]] = [];
     index = 0;
-    while index + 1 < len(live.world.trace) {
-        points.append([live.world.trace[index], live.world.trace[index + 1]]);
+    while index + 2 < len(live.world.trace) {
+        points.append([
+            live.world.trace[index],
+            live.world.trace[index + 1],
+            live.world.trace[index + 2]
+        ]);
+        index = index + 3;
+    }
+    return _bound(points, 80);
+}
+
+def _collapse_of(live: LiveMatch) -> list[list[float]] {
+    points: list[list[float]] = [];
+    index = 0;
+    while index + 1 < len(live.world.collapse) {
+        points.append([live.world.collapse[index], live.world.collapse[index + 1]]);
         index = index + 2;
     }
+    return _bound(points, 80);
+}
+
+def _window_open(live: LiveMatch) -> bool {
+    return live.reveal_until > 0 and server_now() < live.reveal_until;
+}
+
+def _in_reveal(live: LiveMatch, x: float, y: float) -> bool {
+    dx = x - live.reveal_x;
+    dy = y - live.reveal_y;
+    limit = live.reveal_radius * live.reveal_radius + 0.0000001;
+    return dx * dx + dy * dy <= limit;
+}
+
+def _filtered_path(live: LiveMatch, seat: str) -> list[list[float]] {
+    points: list[list[float]] = [];
+    if seat == "" or not _window_open(live) {
+        return points;
+    }
+    for point in live.shot_path {
+        x = point[0];
+        y = point[1];
+        home = False;
+        if seat == "A" and x <= 20.0 {
+            home = True;
+        }
+        if seat == "B" and x >= 20.0 {
+            home = True;
+        }
+        if home or _in_reveal(live, x, y) {
+            points.append(point);
+        }
+    }
     return points;
+}
+
+def _filtered_collapse(live: LiveMatch, seat: str) -> list[list[float]] {
+    empty: list[list[float]] = [];
+    if seat == "" or not _window_open(live) {
+        return empty;
+    }
+    if seat == "B" or (seat == "A" and _post_in_patch(live)) {
+        return live.shot_collapse;
+    }
+    return empty;
 }
 
 def _encode(
@@ -426,7 +518,6 @@ def _encode(
     ok: bool,
     code: str,
     weapon: str,
-    path: list[list[float]],
     broken: bool,
     angle: float
 ) -> str {
@@ -456,7 +547,9 @@ def _encode(
         "weapon": weapon,
         "broken": shown_broken,
         "angle": shown_angle,
-        "path": path,
+        "path": _filtered_path(live, seat),
+        "collapse": _filtered_collapse(live, seat),
+        "your_turn": seat != "" and live.table.rules.active == seat and live.table.rules.phase != "finished" and live.table.rules.result == "",
         "reveal_until": expiry,
         "reveal_x": live.reveal_x if opened else 0.0,
         "reveal_y": live.reveal_y if opened else 0.0,
@@ -487,7 +580,7 @@ def watch(live: LiveMatch, player_id: str, now_ms: int, weapon_override: str = "
     if weapon == "" {
         weapon = "flare" if live.table.rules.phase == "recon" else "shell";
     }
-    return _encode(live, player_id, now_ms, True, "", weapon, [], broken, angle);
+    return _encode(live, player_id, now_ms, True, "", weapon, broken, angle);
 }
 
 def _launch(
@@ -553,18 +646,18 @@ def take_shot(
     weapon: str
 ) -> str {
     if live.refused {
-        return _encode(live, player_id, server_now(), False, "snapshot", "", [], False, 0.0);
+        return _encode(live, player_id, server_now(), False, "snapshot", "", False, 0.0);
     }
     if live.table.in_flight {
-        return _encode(live, player_id, server_now(), False, "busy", "", [], False, 0.0);
+        return _encode(live, player_id, server_now(), False, "busy", "", False, 0.0);
     }
     seat = _seat(live, player_id);
     if seat == "" {
-        return _encode(live, player_id, server_now(), False, "unauthenticated", "", [], False, 0.0);
+        return _encode(live, player_id, server_now(), False, "unauthenticated", "", False, 0.0);
     }
     aim = release_pull(seat, pointer_x, pointer_y, canvas_w, canvas_h, dpr, True, False, False);
     if not aim.fired {
-        return _encode(live, player_id, server_now(), False, aim.reason, "", [], False, 0.0);
+        return _encode(live, player_id, server_now(), False, aim.reason, "", False, 0.0);
     }
     stored = _stored(live, command_id);
     if stored >= 0 {
@@ -573,18 +666,18 @@ def take_shot(
             return watch(live, player_id, server_now(), weapon);
         }
         if epoch != live.table.epoch {
-            return _encode(live, player_id, server_now(), False, "epoch", weapon, [], False, 0.0);
+            return _encode(live, player_id, server_now(), False, "epoch", weapon, False, 0.0);
         }
-        return _encode(live, player_id, server_now(), False, "conflict", weapon, [], False, 0.0);
+        return _encode(live, player_id, server_now(), False, "conflict", weapon, False, 0.0);
     }
     if epoch != live.table.epoch {
-        return _encode(live, player_id, server_now(), False, "epoch", weapon, [], False, 0.0);
+        return _encode(live, player_id, server_now(), False, "epoch", weapon, False, 0.0);
     }
     checked = accept_shot(
         live.table.rules, seat, expected_revision, expected_turn, weapon, aim.angle, aim.power
     );
     if not checked.ok {
-        return _encode(live, player_id, server_now(), False, checked.code, weapon, [], False, 0.0);
+        return _encode(live, player_id, server_now(), False, checked.code, weapon, False, 0.0);
     }
     previous = copy_rules(live.table.rules);
     saved = live.world.capture();
@@ -593,6 +686,8 @@ def take_shot(
     reveal_x = live.reveal_x;
     reveal_y = live.reveal_y;
     reveal_radius = live.reveal_radius;
+    previous_path = live.shot_path;
+    previous_collapse = live.shot_collapse;
     intact_a = True;
     intact_b = True;
     if live.mast_a is not None {
@@ -611,6 +706,8 @@ def take_shot(
         live.table.fail_simulate = False;
         live.table.rules = checked.state;
         _launch(live, seat, weapon, aim.angle, aim.power, server_now(), True);
+        live.shot_path = _path_of(live);
+        live.shot_collapse = _collapse_of(live);
         live.table.shots = shots_before + 1;
         live.table.turn = live.table.rules.turn;
         live.table.revision = live.table.rules.revision;
@@ -639,6 +736,8 @@ def take_shot(
         live.reveal_x = reveal_x;
         live.reveal_y = reveal_y;
         live.reveal_radius = reveal_radius;
+        live.shot_path = previous_path;
+        live.shot_collapse = previous_collapse;
         if live.mast_a is not None {
             mast = live.mast_a as Site;
             mast.intact = intact_a;
@@ -652,7 +751,7 @@ def take_shot(
         live.table.in_flight = False;
         live.table.fail_storage = False;
         live.table.fail_simulate = False;
-        return _encode(live, player_id, server_now(), False, "interrupted", weapon, [], False, 0.0);
+        return _encode(live, player_id, server_now(), False, "interrupted", weapon, False, 0.0);
     }
     try {
         write_commit_line(live.table, command_id, payload);
@@ -668,7 +767,7 @@ def take_shot(
         broken = state.broken;
         angle = state.angle;
     }
-    return _encode(live, player_id, server_now(), True, "", weapon, _path_of(live), broken, angle);
+    return _encode(live, player_id, server_now(), True, "", weapon, broken, angle);
 }
 
 def _clear_journal(directory: str) -> None {
@@ -686,10 +785,10 @@ def _clear_journal(directory: str) -> None {
 def rematch_room(live: LiveMatch, player_id: str) -> str {
     seat = _seat(live, player_id);
     if seat == "" {
-        return _encode(live, player_id, 0, False, "unauthenticated", "", [], False, 0.0);
+        return _encode(live, player_id, 0, False, "unauthenticated", "", False, 0.0);
     }
     if live.table.rules.phase != "finished" {
-        return _encode(live, player_id, 0, False, "active", "", [], False, 0.0);
+        return _encode(live, player_id, 0, False, "active", "", False, 0.0);
     }
     live.table.rules = MatchRules();
     live.table.shots = 0;
@@ -703,6 +802,8 @@ def rematch_room(live: LiveMatch, player_id: str) -> str {
     live.reveal_until = 0;
     live.reveal_x = 0.0;
     live.reveal_y = 0.0;
+    live.shot_path = [];
+    live.shot_collapse = [];
     if live.mast_a is not None {
         mast = live.mast_a as Site;
         mast.intact = True;
@@ -732,7 +833,7 @@ def:protect join_seat(invite: str) -> str {
     live = shared_match();
     claimed = claim(live.table, player, invite);
     if not claimed.ok {
-        return _encode(live, player, 0, False, claimed.code, "", [], False, 0.0);
+        return _encode(live, player, 0, False, claimed.code, "", False, 0.0);
     }
     return watch(live, player, 0);
 }

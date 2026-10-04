@@ -136,6 +136,7 @@ obj PhysicsWorld {
     has dt: float = 1.0 / 180.0;
     has deal_damage: bool = True;
     has trace: list[float] = [];
+    has collapse: list[float] = [];
     has impact_x: float = 0.0;
     has impact_y: float = 0.0;
     has impact_step: int = -1;
@@ -158,6 +159,7 @@ obj PhysicsWorld {
         self.space.on_collision(3, 2, post_solve=_post_solve, data={"world": self});
         self.space.on_collision(3, 1, post_solve=_post_solve, data={"world": self});
         self.trace = [];
+        self.collapse = [];
     }
 
     def drop_projectiles() -> None {
@@ -173,12 +175,29 @@ obj PhysicsWorld {
         self.tracks = kept;
     }
 
+    def _sample_time() -> float {
+        return float(self.step_index + 1) * self.dt;
+    }
+
     def _remember_projectile() -> None {
+        elapsed = self._sample_time();
         for track in self.tracks {
             if track.role == "projectile" {
                 pose = _pose(track.body) as tuple[float, float, float];
                 self.trace.append(pose[0]);
                 self.trace.append(pose[1]);
+                self.trace.append(elapsed);
+            }
+        }
+    }
+
+    def _remember_posts() -> None {
+        elapsed = self._sample_time();
+        for track in self.tracks {
+            if track.role == "post" {
+                pose = _pose(track.body) as tuple[float, float, float];
+                self.collapse.append(pose[2]);
+                self.collapse.append(elapsed);
             }
         }
     }
@@ -448,6 +467,7 @@ obj PhysicsWorld {
         self.damaged = [];
         self.pending = [];
         self.trace = [];
+        self.collapse = [];
         self.impact_step = -1;
         self.impact_x = 0.0;
         self.impact_y = 0.0;
@@ -462,6 +482,7 @@ obj PhysicsWorld {
             self.flush();
             if steps % 20 == 0 {
                 self._remember_projectile();
+                self._remember_posts();
             }
         }
         return self.snapshot(steps);

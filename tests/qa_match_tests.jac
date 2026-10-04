@@ -42,7 +42,8 @@ test "a wrong seat, a duplicate, a stale revision, and the wrong weapon do not s
     duplicate = json.loads(take_shot(live, "player-a", "flare-a", 20.0, 300.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "flare"));
     assert duplicate["ok"];
     assert duplicate["code"] == "";
-    assert len(duplicate["path"]) == 0;
+    assert len(duplicate["path"]) == len(flare["path"]);
+    assert live.table.shots == 1;
     clash = json.loads(take_shot(live, "player-a", "flare-a", 100.0, 390.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "flare"));
     assert not clash["ok"];
     assert clash["code"] == "conflict";

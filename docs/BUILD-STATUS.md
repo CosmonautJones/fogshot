@@ -277,7 +277,26 @@ The Vite proxy at `http://127.0.0.1:8000/function/join_seat` returned the same s
 
 ## Next task
 
-The next stabilization slice is a first-impact reveal, including terrain misses and a larger non-damaging flare patch. JacHammer stays unattempted. This environment has no JacHammer credentials or remote application target. One `jac run` process is the supported worker model. Do not treat localhost as a deploy.
+The next stabilization slice is two reachable outposts with breakable supports, one crush contact, and one modest supply perk. Basic shots stay free. JacHammer, the shared password, and room isolation stay unattempted. One `jac run` process is the supported worker model. Do not treat localhost as a deploy.
+
+## Shot playback
+
+Red run of `tests/playback_tests.jac` while `watch` still returned `[]`: `1 failed in 1.32s` at `assert len(watched["path"]) > 3`. The captured path was `[]`. `node --test tests/playback_client.test.mjs` first failed with `ERR_MODULE_NOT_FOUND` for `client/playback.js`.
+
+A shot now stores `[x, y, t]` samples and post `[angle, t]` samples, at most 80 of each. `t` is simulated seconds. Both seats receive the path while the review window is open. Seat A keeps `x <= 20` plus the reveal circle. Seat B keeps `x >= 20` plus that circle. Collapse is sent only when that seat can see the post. An empty seat gets neither. After `reveal_until`, both lists are empty. Restart from `canonical.json` restores them. The client samples by elapsed time, ignores an older epoch or revision, and does not fire on cancel, a second pointer, a release outside the canvas, or `your_turn` false. The server still rejects an illegal shot.
+
+Green:
+
+```text
+JAC_TEST_STRICT=1 jac test tests/physics_driver_tests.jac tests/scene_host_tests.jac tests/aim_rules_tests.jac tests/siege_view_tests.jac tests/authority_tests.jac tests/supply_tests.jac tests/live_match_tests.jac tests/outcome_tests.jac tests/qa_match_tests.jac tests/clock_authority_tests.jac tests/command_envelope_tests.jac tests/transaction_tests.jac tests/impact_reveal_tests.jac tests/playback_tests.jac -v
+node --test tests/playback_client.test.mjs
+```
+
+Jac result before the empty-seat filter: `46 passed in 5.77s`. Nearby files after that filter: `9 passed in 4.76s`. Node result: `3 passed`.
+
+## First impact
+
+`tests/impact_reveal_tests.jac` failed first because a flare onto empty ground left `view.reveal` null (`1 failed in 1.28s`). A structure hit now centers the patch on the first structure contact, not the body's final pose. A terrain-only miss centers it on the ground contact. Shell radius is 2.2. Flare radius is 3.0 and does not damage. The old miss assertion that required `reveal` to be null was replaced. Full suite after that change: `45 passed in 3.32s`.
 
 ## Shot transaction
 

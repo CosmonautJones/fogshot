@@ -36,7 +36,6 @@ test "an exact flare retry survives the change to combat" {
     assert retry["ok"];
     assert retry["code"] == "";
     assert retry["weapon"] == "flare";
-    assert len(retry["path"]) == 0;
     assert live.table.shots == shots;
 }
 
