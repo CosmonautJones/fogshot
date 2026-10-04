@@ -234,6 +234,7 @@ An unseated full page reports supply dark because it has no seat. That caption i
 - `30c236c3eb5bb788bd8130ad5d9c58cf4ccbdc27` restores a restarted match from the journal and ignores a repeated command.
 - `b0c8b95ddd7995175af9283dea461aa141281176` lets a refreshed browser reclaim its seat.
 - `7be2563b9def5258eb7fd0b61c340b33456722e1` records the QA passes, the journal replay, and the browser restart.
+- `52d9f8f6d5a72e741b73dccb70ab33415ad555d5` records the unauthenticated `join_seat` HTTP 401.
 
 ## Unauthenticated join
 
