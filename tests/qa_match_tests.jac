@@ -20,13 +20,13 @@ def _ready(directory: str) -> any {
 test "a wrong seat, a duplicate, a stale revision, and the wrong weapon do not shoot" {
     directory = _dir();
     live = _ready(directory);
-    early = json.loads(take_shot(live, "player-b", "too-soon", 60.0, 300.0, 800.0, 400.0, 1.0, 1000));
+    early = json.loads(take_shot(live, "player-b", "too-soon", 60.0, 300.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "flare"));
     assert not early["ok"];
     assert early["code"] == "actor";
     assert early["phase"] == "recon";
     assert "4.25" not in json.dumps(early);
     assert "12345.67" not in json.dumps(early);
-    guest = take_shot(live, "nobody", "guest", 20.0, 300.0, 800.0, 400.0, 1.0, 1000);
+    guest = take_shot(live, "nobody", "guest", 20.0, 300.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "flare");
     assert json.loads(guest)["code"] == "unauthenticated";
     assert "core-a" not in guest;
     assert "core-b" not in guest;
@@ -35,15 +35,15 @@ test "a wrong seat, a duplicate, a stale revision, and the wrong weapon do not s
     shell_now = submit(live.table, "player-a", "fogshot", "cmd-shell", "A", 0, 0, "shell", 0.0, 5.0);
     assert shell_now.code == "weapon";
     assert shell_now.shots == 0;
-    flare = json.loads(take_shot(live, "player-a", "flare-a", 20.0, 300.0, 800.0, 400.0, 1.0, 1000));
+    flare = json.loads(take_shot(live, "player-a", "flare-a", 20.0, 300.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "flare"));
     assert flare["ok"];
     assert flare["weapon"] == "flare";
     assert not flare["broken"];
-    duplicate = json.loads(take_shot(live, "player-a", "flare-a", 20.0, 300.0, 800.0, 400.0, 1.0, 1100));
+    duplicate = json.loads(take_shot(live, "player-a", "flare-a", 20.0, 300.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "flare"));
     assert duplicate["ok"];
     assert duplicate["code"] == "";
     assert len(duplicate["path"]) == 0;
-    clash = json.loads(take_shot(live, "player-a", "flare-a", 100.0, 390.0, 800.0, 400.0, 1.0, 1200));
+    clash = json.loads(take_shot(live, "player-a", "flare-a", 100.0, 390.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "flare"));
     assert not clash["ok"];
     assert clash["code"] == "conflict";
     wrong_weapon = submit(
@@ -52,7 +52,7 @@ test "a wrong seat, a duplicate, a stale revision, and the wrong weapon do not s
     );
     assert wrong_weapon.code == "weapon";
     assert wrong_weapon.shots == 1;
-    other = json.loads(take_shot(live, "player-b", "flare-b", 60.0, 300.0, 800.0, 400.0, 1.0, 2000));
+    other = json.loads(take_shot(live, "player-b", "flare-b", 60.0, 300.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "flare"));
     assert other["ok"];
     assert other["weapon"] == "flare";
     assert other["phase"] == "combat";
@@ -73,10 +73,10 @@ test "a wrong seat, a duplicate, a stale revision, and the wrong weapon do not s
 test "a miss still returns the projectile path and hides the enemy core" {
     directory = _dir();
     live = _ready(directory);
-    flare = json.loads(take_shot(live, "player-a", "flare-a", 20.0, 300.0, 800.0, 400.0, 1.0, 1000));
-    take_shot(live, "player-b", "flare-b", 60.0, 300.0, 800.0, 400.0, 1.0, 2000);
+    flare = json.loads(take_shot(live, "player-a", "flare-a", 20.0, 300.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "flare"));
+    take_shot(live, "player-b", "flare-b", 60.0, 300.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "flare");
     pin_clock(flare["reveal_until"] + 1);
-    missed_raw = take_shot(live, "player-a", "shell-miss", 100.0, 390.0, 800.0, 400.0, 1.0, 8000);
+    missed_raw = take_shot(live, "player-a", "shell-miss", 100.0, 390.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "shell");
     missed = json.loads(missed_raw);
     assert missed["ok"];
     assert missed["code"] == "";
@@ -102,9 +102,9 @@ test "a miss still returns the projectile path and hides the enemy core" {
 test "restart keeps both seats, the dark supply, the dead core, and rematch" {
     directory = _dir();
     live = _ready(directory);
-    take_shot(live, "player-a", "flare-a", 20.0, 300.0, 800.0, 400.0, 1.0, 1000);
-    take_shot(live, "player-b", "flare-b", 60.0, 300.0, 800.0, 400.0, 1.0, 2000);
-    opened = json.loads(take_shot(live, "player-a", "shell-link", 20.0, 300.0, 800.0, 400.0, 1.0, 5000));
+    take_shot(live, "player-a", "flare-a", 20.0, 300.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "flare");
+    take_shot(live, "player-b", "flare-b", 60.0, 300.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "flare");
+    opened = json.loads(take_shot(live, "player-a", "shell-link", 20.0, 300.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "shell"));
     assert opened["ok"];
     assert opened["broken"];
     assert opened["result"] == "";
@@ -124,16 +124,16 @@ test "restart keeps both seats, the dark supply, the dead core, and rematch" {
     assert "4.25" not in json.dumps(owner);
     assert "core-a" not in json.dumps(owner);
     assert "12345.67" not in json.dumps(owner);
-    carried = json.loads(take_shot(resumed, "player-b", "shell-b", 60.0, 300.0, 800.0, 400.0, 1.0, 6000));
+    carried = json.loads(take_shot(resumed, "player-b", "shell-b", 60.0, 300.0, 800.0, 400.0, 1.0, resumed.table.epoch, resumed.table.turn, resumed.table.revision, "shell"));
     assert carried["ok"];
     assert carried["result"] == "";
     assert carried["shot_ready"];
     assert "4.25" not in json.dumps(carried);
-    finish = json.loads(take_shot(resumed, "player-a", "shell-core", 10.0, 390.0, 800.0, 400.0, 1.0, 9000));
+    finish = json.loads(take_shot(resumed, "player-a", "shell-core", 10.0, 390.0, 800.0, 400.0, 1.0, resumed.table.epoch, resumed.table.turn, resumed.table.revision, "shell"));
     assert finish["ok"];
     assert finish["result"] == "A";
     assert finish["phase"] == "finished";
-    denied = json.loads(take_shot(resumed, "player-b", "shell-late", 60.0, 300.0, 800.0, 400.0, 1.0, 12000));
+    denied = json.loads(take_shot(resumed, "player-b", "shell-late", 60.0, 300.0, 800.0, 400.0, 1.0, resumed.table.epoch, resumed.table.turn, resumed.table.revision, "shell"));
     assert denied["code"] == "finished";
     pin_clock(finish["reveal_until"] + 1);
     closed = watch(resumed, "player-a", 0);

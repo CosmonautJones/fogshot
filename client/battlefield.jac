@@ -13,6 +13,12 @@ glob _timer: any = None;
 glob _joined: bool = False;
 glob _joining: bool = False;
 glob _email_ready: str = "";
+glob _epoch: int = 1;
+glob _turn: int = 0;
+glob _revision: int = 0;
+glob _phase: str = "recon";
+glob _pending: str = "";
+glob _pending_weapon: str = "";
 
 def _email() -> str {
     if _email_ready != "" {
@@ -40,11 +46,23 @@ def _command() -> str {
     return "cmd-" + str(Date.now()) + "-" + token;
 }
 
+def _remember(parsed: any) -> None {
+    try {
+        _epoch = int(parsed.epoch);
+        _turn = int(parsed.turn);
+        _revision = int(parsed.revision);
+        _phase = str(parsed.phase);
+    } except Exception {
+        return;
+    }
+}
+
 def _note(raw: str) -> None {
     if not _set_caption {
         return;
     }
     parsed = JSON.parse(raw) as any;
+    _remember(parsed);
     supply = "on" if parsed.own_powered != False else "dark";
     shell = "ready" if parsed.shot_ready != False else "held";
     text = "Seat " + str(parsed.seat) + " / " + str(parsed.phase) + " / " + str(parsed.weapon) + " / supply " + supply + " / shell " + shell + ". Pull back from the launcher. The shot is the server result.";
@@ -61,6 +79,8 @@ async def _again() -> None {
     if not _joined {
         return;
     }
+    _pending = "";
+    _pending_weapon = "";
     raw: str = "";
     try {
         raw = await play_again(INVITE);
@@ -111,7 +131,7 @@ async def _poll() -> None {
     }
     raw: str = "";
     try {
-        raw = await watch_match(INVITE, int(Date.now()));
+        raw = await watch_match(INVITE, 0);
     } except Exception {
         return;
     }
@@ -125,15 +145,33 @@ async def _release(px: float, py: float) -> None {
     if not _joined {
         return;
     }
+    if _pending == "" {
+        _pending = _command();
+        _pending_weapon = "flare" if _phase == "recon" else "shell";
+    }
     fired: str = "";
     try {
-        fired = await loose_shot(INVITE, _command(), px, py, 800.0, 400.0, 1.0, int(Date.now()));
+        fired = await loose_shot(
+            INVITE,
+            _pending,
+            _epoch,
+            _turn,
+            _revision,
+            _pending_weapon,
+            px,
+            py,
+            800.0,
+            400.0,
+            1.0
+        );
     } except Exception {
         if _set_caption {
             _set_caption.call(None, "The server rejected the pull.");
         }
         return;
     }
+    _pending = "";
+    _pending_weapon = "";
     if _apply {
         _apply.call(None, fired);
     }

@@ -19,6 +19,7 @@ obj Table {
     has shots: int = 0;
     has turn: int = 0;
     has revision: int = 0;
+    has epoch: int = 1;
     has in_flight: bool = False;
     has fail_before_commit: bool = False;
     has force_finished: bool = False;
@@ -79,12 +80,13 @@ def _read_text(path: str) -> str {
 def _write_seats(table: Table) -> None {
     _write_text(_seats_path(table.directory), json.dumps({
         "A": table.seat_a,
-        "B": table.seat_b
+        "B": table.seat_b,
+        "epoch": table.epoch
     }));
 }
 
-def _payload(actor: str, revision: int, turn: int, weapon: str, angle: float, power: float) -> str {
-    return actor + "|" + str(revision) + "|" + str(turn) + "|" + weapon + "|" + str(angle) + "|" + str(power);
+def _payload(actor: str, revision: int, turn: int, weapon: str, angle: float, power: float, epoch: int) -> str {
+    return actor + "|" + str(revision) + "|" + str(turn) + "|" + weapon + "|" + str(angle) + "|" + str(power) + "|" + str(epoch);
 }
 
 def _result(ok: bool, code: str, table: Table) -> SubmitResult {
@@ -123,6 +125,10 @@ def open_table(invite: str, directory: str) -> Table {
     table = _blank(invite, directory);
     _write_seats(table);
     return table;
+}
+
+def save_seats(table: Table) -> None {
+    _write_seats(table);
 }
 
 def claim(table: Table, player_id: str, invite: str) -> ClaimResult {
@@ -206,7 +212,7 @@ def submit(
     if actor != seat {
         return _result(False, "actor", table);
     }
-    payload = _payload(actor, revision, turn, weapon, angle, power);
+    payload = _payload(actor, revision, turn, weapon, angle, power, table.epoch);
     existing = _commit_index(table, command_id);
     if existing >= 0 {
         if table.payloads[existing] == payload {
@@ -252,6 +258,11 @@ def reload_table(invite: str, directory: str) -> Table {
         seats = json.loads(seats_raw);
         table.seat_a = str(seats["A"]);
         table.seat_b = str(seats["B"]);
+        try {
+            table.epoch = int(seats["epoch"]);
+        } except Exception {
+            table.epoch = 1;
+        }
     }
     raw = _read_text(_journal_path(directory));
     for line in raw.split("\n") {

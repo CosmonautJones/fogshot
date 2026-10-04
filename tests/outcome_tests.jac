@@ -16,9 +16,9 @@ test "a dark supply still allows a shell, then the core decides the winner" {
     seat_b = claim_player(live, "player-b");
     assert seat_a.seat == "A";
     assert seat_b.seat == "B";
-    take_shot(live, "player-a", "flare-a", 20.0, 300.0, 800.0, 400.0, 1.0, 1000);
-    take_shot(live, "player-b", "flare-b", 60.0, 300.0, 800.0, 400.0, 1.0, 2000);
-    opened = take_shot(live, "player-a", "shell-link", 20.0, 300.0, 800.0, 400.0, 1.0, 5000);
+    take_shot(live, "player-a", "flare-a", 20.0, 300.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "flare");
+    take_shot(live, "player-b", "flare-b", 60.0, 300.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "flare");
+    opened = take_shot(live, "player-a", "shell-link", 20.0, 300.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "shell");
     link = json.loads(opened);
     assert link["ok"];
     assert link["broken"];
@@ -34,7 +34,7 @@ test "a dark supply still allows a shell, then the core decides the winner" {
     assert owner["own_core"] == True;
     assert owner["result"] == "";
     assert owner["enemy_cores"] == 1;
-    carried = take_shot(live, "player-b", "shell-b", 60.0, 300.0, 800.0, 400.0, 1.0, 6000);
+    carried = take_shot(live, "player-b", "shell-b", 60.0, 300.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "shell");
     still = json.loads(carried);
     assert still["ok"];
     assert still["result"] == "";
@@ -43,7 +43,7 @@ test "a dark supply still allows a shell, then the core decides the winner" {
     assert "12345.67" not in carried;
     assert "-9876.54" not in carried;
     assert "87654.32" not in carried;
-    finish = take_shot(live, "player-a", "shell-core", 10.0, 390.0, 800.0, 400.0, 1.0, 9000);
+    finish = take_shot(live, "player-a", "shell-core", 10.0, 390.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "shell");
     won = json.loads(finish);
     assert won["ok"];
     assert won["result"] == "A";
@@ -51,7 +51,7 @@ test "a dark supply still allows a shell, then the core decides the winner" {
     assert won["shot_ready"] == False;
     assert "12345.67" not in finish;
     assert "-9876.54" not in finish;
-    denied = json.loads(take_shot(live, "player-b", "shell-late", 60.0, 300.0, 800.0, 400.0, 1.0, 12000));
+    denied = json.loads(take_shot(live, "player-b", "shell-late", 60.0, 300.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "shell"));
     assert denied["code"] == "finished";
     pin_clock(won["reveal_until"] + 1);
     closed = watch(live, "player-a", 0);

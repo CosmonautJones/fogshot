@@ -7,16 +7,19 @@ import from game.aim { launcher_for, release_pull }
 import from game.rules { MatchRules, resolve_cores }
 import from graph.supply { Cable, Site, assess }
 import from physics.pymunk_driver { PhysicsWorld, SimOutcome }
-import from server.authority { ClaimResult, Table, claim, reload_table, submit }
+import from server.authority { ClaimResult, Table, claim, reload_table, save_seats, submit }
 import from server.clock { server_now }
 import from server.views { SecretBody, project_view }
 
 ::py::
-def _same_shot(payload, seat, weapon, angle, power):
+def _same_shot(payload, seat, weapon, angle, power, epoch):
     parts = str(payload).split("|")
     if len(parts) < 6:
         return False
     if parts[0] != seat or parts[3] != weapon:
+        return False
+    stored_epoch = int(parts[6]) if len(parts) > 6 else 1
+    if stored_epoch != int(epoch):
         return False
     return abs(float(parts[4]) - float(angle)) < 1e-9 and abs(float(parts[5]) - float(power)) < 1e-9
 
@@ -308,12 +311,15 @@ def _encode(
         "shot_ready": _ready(live),
         "enemy_cores": _enemy_cores(live, seat),
         "own_core": _own_core(live, seat),
+        "epoch": live.table.epoch,
+        "turn": live.table.turn,
+        "revision": live.table.revision,
         "view": json.loads(json.dumps(view.__dict__))
     };
     return json.dumps(payload);
 }
 
-def watch(live: LiveMatch, player_id: str, now_ms: int) -> str {
+def watch(live: LiveMatch, player_id: str, now_ms: int, weapon_override: str = "") -> str {
     broken = False;
     angle = 0.0;
     track = live.world.find("enemy-post");
@@ -322,7 +328,10 @@ def watch(live: LiveMatch, player_id: str, now_ms: int) -> str {
         broken = state.broken;
         angle = state.angle;
     }
-    weapon = "flare" if live.table.rules.phase == "recon" else "shell";
+    weapon = weapon_override;
+    if weapon == "" {
+        weapon = "flare" if live.table.rules.phase == "recon" else "shell";
+    }
     return _encode(live, player_id, now_ms, True, "", weapon, [], broken, angle);
 }
 
@@ -383,24 +392,32 @@ def take_shot(
     canvas_w: float,
     canvas_h: float,
     dpr: float,
-    now_ms: int
+    epoch: int,
+    expected_turn: int,
+    expected_revision: int,
+    weapon: str
 ) -> str {
     seat = _seat(live, player_id);
     if seat == "" {
-        return _encode(live, player_id, now_ms, False, "unauthenticated", "", [], False, 0.0);
+        return _encode(live, player_id, server_now(), False, "unauthenticated", "", [], False, 0.0);
     }
     aim = release_pull(seat, pointer_x, pointer_y, canvas_w, canvas_h, dpr, True, False, False);
     if not aim.fired {
-        return _encode(live, player_id, now_ms, False, aim.reason, "", [], False, 0.0);
+        return _encode(live, player_id, server_now(), False, aim.reason, "", [], False, 0.0);
     }
-    weapon = "flare" if live.table.rules.phase == "recon" else "shell";
     stored = _stored(live, command_id);
     if stored >= 0 {
-        same = _same_shot(live.table.payloads[stored], seat, weapon, aim.angle, aim.power) as bool;
+        same = _same_shot(live.table.payloads[stored], seat, weapon, aim.angle, aim.power, epoch) as bool;
         if same {
-            return watch(live, player_id, now_ms);
+            return watch(live, player_id, server_now(), weapon);
         }
-        return _encode(live, player_id, now_ms, False, "conflict", weapon, [], False, 0.0);
+        if epoch != live.table.epoch {
+            return _encode(live, player_id, server_now(), False, "epoch", weapon, [], False, 0.0);
+        }
+        return _encode(live, player_id, server_now(), False, "conflict", weapon, [], False, 0.0);
+    }
+    if epoch != live.table.epoch {
+        return _encode(live, player_id, server_now(), False, "epoch", weapon, [], False, 0.0);
     }
     before = live.table.shots;
     decision = submit(
@@ -409,19 +426,19 @@ def take_shot(
         live.table.invite,
         command_id,
         seat,
-        live.table.revision,
-        live.table.turn,
+        expected_revision,
+        expected_turn,
         weapon,
         aim.angle,
         aim.power
     );
     if not decision.ok {
-        return _encode(live, player_id, now_ms, False, decision.code, weapon, [], False, 0.0);
+        return _encode(live, player_id, server_now(), False, decision.code, weapon, [], False, 0.0);
     }
     if decision.shots == before {
-        return watch(live, player_id, now_ms);
+        return watch(live, player_id, server_now());
     }
-    _launch(live, seat, weapon, aim.angle, aim.power, now_ms, True);
+    _launch(live, seat, weapon, aim.angle, aim.power, server_now(), True);
     broken = False;
     angle = 0.0;
     post = live.world.find("enemy-post");
@@ -430,7 +447,7 @@ def take_shot(
         broken = state.broken;
         angle = state.angle;
     }
-    return _encode(live, player_id, now_ms, True, "", weapon, _path_of(live), broken, angle);
+    return _encode(live, player_id, server_now(), True, "", weapon, _path_of(live), broken, angle);
 }
 
 def _clear_journal(directory: str) -> None {
@@ -453,6 +470,7 @@ def rematch_room(live: LiveMatch, player_id: str) -> str {
     live.table.shots = 0;
     live.table.turn = 0;
     live.table.revision = 0;
+    live.table.epoch = live.table.epoch + 1;
     live.table.commits = [];
     live.table.payloads = [];
     live.table.in_flight = False;
@@ -470,6 +488,7 @@ def rematch_room(live: LiveMatch, player_id: str) -> str {
     }
     _arm(live);
     _clear_journal(live.table.directory);
+    save_seats(live.table);
     return watch(live, player_id, 0);
 }
 
@@ -503,12 +522,15 @@ def:protect watch_match(invite: str, now_ms: int) -> str {
 def:protect loose_shot(
     invite: str,
     command_id: str,
+    epoch: int,
+    expected_turn: int,
+    expected_revision: int,
+    weapon: str,
     pointer_x: float,
     pointer_y: float,
     canvas_w: float,
     canvas_h: float,
-    dpr: float,
-    now_ms: int
+    dpr: float
 ) -> str {
     if invite != "fogshot" {
         return "{\"ok\": false, \"code\": \"unauthenticated\", \"seat\": \"\"}";
@@ -522,6 +544,9 @@ def:protect loose_shot(
         canvas_w,
         canvas_h,
         dpr,
-        server_now()
+        epoch,
+        expected_turn,
+        expected_revision,
+        weapon
     );
 }
