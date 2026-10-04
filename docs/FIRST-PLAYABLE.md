@@ -74,7 +74,7 @@ Derive actual codespace annotations and scaffold paths from the selected compile
 - [x] The drawn projectile is the server path. `client/mount_field.js` does not clamp that path to the fog edge and does not decide the hit.
 - [x] Two-client evidence is in [BUILD-STATUS.md](BUILD-STATUS.md). The second context's response bodies omit `12345.67`, `-9876.54`, and `87654.32`.
 
-`jac run` serves `main.jac` at `http://localhost:8000/`. Phaser 3.90.0 logs `Phaser v3.90.0 (WebGL | Web Audio)`. A pull submits `loose_shot`. The gold dot follows the returned path past the fog edge. A hitting shell draws the fallen post only while that seat's reveal is open.
+`jac run` serves `main.jac` at `http://localhost:8000/`. Phaser 3.90.0 logs `Phaser v3.90.0 (WebGL | Web Audio)`. A pull submits `loose_shot`. The gold dot follows the server path only while that payload still has samples, including into an open reveal, and it is removed when the next watch sends an empty path. A hitting shell draws the fallen post only while that seat's reveal is open.
 
 ## Task 7: Supply graph
 
