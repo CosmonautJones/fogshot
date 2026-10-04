@@ -62,7 +62,7 @@ Result: `7 passed in 0.84s`. The earlier red run failed with `ModuleNotFoundErro
 - `capture` / `restore` puts the post pose and unbroken flag back and drops the projectile that was added after the checkpoint.
 - Seat A's serialized view omits sentinel coordinates `12345.67` and `-9876.54`. An open reveal includes the nearby enemy body and a clipped wide beam, hides enemy health as `-1`, and drops the patch after expiry so `24.0` is absent from `json.dumps(view.__dict__)`.
 
-Details, the Pymunk `::py::` import seam, and the commands are in [RUNTIME.md](RUNTIME.md).
+Details, the Pymunk `::py::` import seam, and the commands are in [RUNTIME.md](RUNTIME.md). The agent note for later Jac sessions is [JAC-0.37-EVIDENCE.md](JAC-0.37-EVIDENCE.md). A push of that note to `CosmonautJones/jacbrain` was denied to `cursor[bot]` (HTTP 403).
 
 ## Limitations
 

@@ -22,6 +22,7 @@ Two independent browser sessions. One launcher and one supported objective per s
 - [Architecture decision](docs/adr/0001-jac-first-authoritative-game.md)
 - [First-playable implementation plan](docs/FIRST-PLAYABLE.md)
 - [Build status and evidence](docs/BUILD-STATUS.md)
+- [Jac 0.37.23 evidence for later agents](docs/JAC-0.37-EVIDENCE.md)
 - [Agent working agreement](AGENTS.md)
 
 ## Development
