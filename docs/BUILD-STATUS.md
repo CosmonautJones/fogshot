@@ -12,7 +12,15 @@ Gameplay work is on branch `cursor/first-playable-66d6`. This file is updated wh
 
 ## What runs
 
-Jac 0.37.23, Pymunk 7.3.0, pull-back aim, turn rules, one trusted siege shot, and an allowlist view.
+Jac 0.37.23, Pymunk 7.3.0, pull-back aim, turn rules, one trusted siege shot, an allowlist view, a two-seat journal, a supply walk, and a Phaser field.
+
+Combined suite after the page boot:
+
+```text
+JAC_TEST_STRICT=1 jac test tests/physics_driver_tests.jac tests/scene_host_tests.jac tests/aim_rules_tests.jac tests/siege_view_tests.jac tests/authority_tests.jac tests/supply_tests.jac -v
+```
+
+Result: `31 passed in 1.02s`.
 
 ```text
 JAC_TEST_STRICT=1 jac test tests/physics_driver_tests.jac tests/scene_host_tests.jac tests/aim_rules_tests.jac tests/siege_view_tests.jac -v
@@ -58,9 +66,9 @@ Details, the Pymunk `::py::` import seam, and the commands are in [RUNTIME.md](R
 
 ## Limitations
 
-- No playable page. There is no `main.jac` yet, so `jac run` cannot serve Fogshot.
-- Phaser 3.90.0 is installed and pinned. Nothing has opened it in a browser.
-- The scene test counts handler names. It does not create or destroy a Phaser game.
+- `jac run` serves `http://localhost:8000/`. Phaser 3.90.0 starts in WebGL. A browser pull draws a projectile that stops on the fog edge. That projectile is the local guide in `client/mount_field.js`. It is not a server hit, and the drawn post does not break.
+- The scene-host test still counts handler names. The browser mount registers `pointerdown`, `pointermove`, and `pointerup` once and destroys the Phaser game on effect cleanup.
+- Two browsers, a temporary enemy reveal, and a server-driven collapse have not been exercised.
 - Direct `import pymunk` does not compile on Jac 0.37.23 (E1030 on `Body.angle.setter`). The solver is still Pymunk, loaded through `_pymunk()`.
 - The measured 0.15 / power-14 shell from launcher A lands at the midline. A post at x=24 is past that landing, so the siege fixture places the target at x=20. This is not a claim that every legal aim reaches the far base.
 - The view test serializes the projection object. It does not yet inspect HTTP replay, error, polling, or reconnect bytes.
@@ -81,6 +89,10 @@ Result: `6 passed in 0.80s`. The red run was `ModuleNotFoundError: No module nam
 
 `PowerWalk` follows intact `Cable` edges. A broken relay blocks the only route. An intact alternate still powers the objective. A two-node cycle returns. A separated objective stays a target, and `shot_ready` stays true. Another owner's nodes are neither powered nor targets. `sentinel-supply` is not in `[root -->[?:Site]]`.
 
+## Browser
+
+`jac build` exited 0 (client bundle built, 9/9 server modules compiled). `jac run` logged `Server ready` with the app on `http://localhost:8000/` and the API on `http://localhost:8001/`. The page title was `Jac App (Dev)`. The console logged `Phaser v3.90.0 (WebGL | Web Audio)`. The only console error was a missing `/favicon.ico` (404). A straight pull from the launcher left the projectile on the fog boundary and did not draw it in the dark half.
+
 ## Next task
 
-Serve the journal through authenticated `def:protect` endpoints and prove an unauthenticated call is rejected with HTTP 401. Then render the authoritative view in Phaser: pull-back, projectile, braced post, fog, and a temporary reveal, with two browser sessions that do not receive the sentinel coordinates.
+Serve the journal through authenticated `def:protect` endpoints and prove an unauthenticated call is rejected with HTTP 401. Drive the Phaser projectile from that response, including the braced-post collapse and a temporary reveal, and show that a second browser does not receive the sentinel coordinates.

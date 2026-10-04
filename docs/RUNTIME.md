@@ -86,10 +86,32 @@ Red run before `server/authority.jac` existed: `ModuleNotFoundError: No module n
 
 The journal is files under a per-test temp directory (`journal.jsonl`, `seats.json`, `pending.json`). It is not the Jac graph, so unrevealed coordinates are not attached to `root`. `runtime-data/` stays gitignored. No HTTP status code was captured for this slice.
 
+## Supply walk
+
+```text
+JAC_TEST_STRICT=1 jac test tests/supply_tests.jac -v
+```
+
+Result: `6 passed in 0.80s`. Red run: `ModuleNotFoundError: No module named 'graph'`.
+
+The walk uses `Site` nodes and `Cable` edges. It does not attach them to `root`. A physical break does not yet flip `intact`.
+
+## Browser boot
+
+```text
+jac check main.jac client/battlefield.jac
+jac build
+jac run
+```
+
+`jac check` exited 0 with warnings: `W1101` because `./mount_field.js` has no Jac stub, `W1102` because Phaser's named exports are untyped, and `W2001` on JSX tag names. `jac build` exited 0. It compiled 9/9 server modules and built the client bundle. `jac run` printed `Server ready`, app `http://localhost:8000/`, API `http://localhost:8001/`.
+
+Phaser 3.90.0's ESM build exports `Game` and `AUTO` by name, so the Jac import does not need a re-export shim. Scene callbacks still live in `client/mount_field.js` because a Jac lambda does not bind Phaser's `this`.
+
+A browser pull on the 800 by 400 canvas moved a projectile to the fog boundary at x=400 and left the right half covered. That is local presentation. The server did not simulate the shot.
+
 ## Not claimed
 
-- No `main.jac` server is running.
-- Phaser has not mounted a canvas.
-- JacHammer has not been deployed.
-- `jac build` has not been run.
-- Scene-host coverage is the handler set in Jac. It is not yet a browser dispose of a Phaser.Game.
+- JacHammer has not been deployed. This environment has no JacHammer credentials or remote application target.
+- The browser projectile is not the Pymunk siege shot.
+- Scene-host coverage is the handler set in Jac. The browser path destroys `Phaser.Game` in the effect cleanup, and that destroy was not asserted by an automated test.

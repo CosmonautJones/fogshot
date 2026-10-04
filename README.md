@@ -4,7 +4,7 @@
 
 A Jac-first multiplayer physics-siege game: pull back, launch into a hidden outpost, remember the brief glimpse, and bring its infrastructure down.
 
-**Current status: Jac 0.37.23, a tested Pymunk 7.3.0 siege shot, an allowlist view, and a two-seat command journal that reloads without firing a shot twice. No browser match yet.** See [BUILD-STATUS](docs/BUILD-STATUS.md) and [RUNTIME](docs/RUNTIME.md).
+**Current status: Jac 0.37.23 serves a Phaser 3.90.0 field at `jac run`. The page shows a launcher, a friendly post, fog, and a pull whose projectile stops at the fog. The tested Pymunk collapse, allowlist view, journal, and supply walk are not yet driven by that page.** See [BUILD-STATUS](docs/BUILD-STATUS.md) and [RUNTIME](docs/RUNTIME.md).
 
 ## Selected direction
 

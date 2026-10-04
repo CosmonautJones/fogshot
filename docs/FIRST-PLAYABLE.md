@@ -74,12 +74,14 @@ Derive actual codespace annotations and scaffold paths from the selected compile
 - [ ] Animate only the authoritative permitted result. The client never decides a hidden hit.
 - [ ] Capture actual two-client evidence, run the tests/build, commit, and push.
 
+`jac run` serves `main.jac` at `http://localhost:8000/`. Phaser 3.90.0 logs `Phaser v3.90.0 (WebGL | Web Audio)`. A pull on the launcher draws a projectile that stops on the fog boundary. The friendly post does not fall, and nothing on the page reveals the enemy half. Two browser sessions are still open.
+
 ## Task 7: Supply graph
 
 - [x] Test intact chain, broken only route, alternate path, cyclic graph, separated endpoints, and ownership isolation. `tests/supply_tests.jac`.
 - [x] Use real Jac nodes/edges/traversal to update the powered indicator after physical breaks. Rubble does not conduct. `graph/supply.jac` uses `Site`, `Cable`, and `PowerWalk`. The walk is not yet triggered by a Pymunk break, so the page has no powered lamp.
 - [x] A disconnected objective remains a target, and the basic shot remains available. `shot_ready` is true in each of those cases.
-- [ ] Verify, commit, and push.
+- [x] Verify, commit, and push. `ad5f899750a8cc41d5595c776dfdedd0457a9150` on `origin/cursor/first-playable-66d6`.
 
 ## Task 8: Hosting and measured report
 
