@@ -27,6 +27,9 @@ async function read(page) {
             st: field?.dataset.shotTime || "",
             pow: field?.dataset.powered || "",
             phase: field?.dataset.phase || "",
+            result: field?.dataset.result || "",
+            epoch: field?.dataset.epoch || "",
+            ready: field?.dataset.shotReady || "",
         };
     });
 }
@@ -57,6 +60,28 @@ const ctxB = await browser.newContext({ viewport: { width: 960, height: 720 } })
 const a = await ctxA.newPage();
 const b = await ctxB.newPage();
 const bodies = [];
+const ownBodies = [];
+const shots = [];
+for (const page of [a, b]) {
+    page.on("request", (req) => {
+        if (req.method() === "POST" && req.url().includes("/function/loose_shot")) {
+            shots.push({
+                url: req.url(),
+                headers: req.headers(),
+                body: req.postData() || "",
+            });
+        }
+    });
+}
+a.on("response", async (res) => {
+    try {
+        if (res.url().includes("/function/")) {
+            ownBodies.push(await res.text());
+        }
+    } catch (err) {
+        ownBodies.push("");
+    }
+});
 b.on("response", async (res) => {
     try {
         if (!res.url().includes("/function/")) {
@@ -124,9 +149,90 @@ try {
         fail(`seat B still had a shot marker: ${closedB.sx}`);
     }
     const leaked = bodies.filter((text) => sentinels.some((item) => text.includes(item)));
-    if (bodies.length < 1 || leaked.length) {
-        fail(`seat B bodies ${bodies.length}, leaked ${leaked.length}`);
+    const ownLeaked = ownBodies.filter((text) => sentinels.some((item) => text.includes(item)));
+    if (bodies.length < 1 || leaked.length || ownLeaked.length) {
+        fail(`seat B bodies ${bodies.length}, leaked ${leaked.length}; seat A leaked ${ownLeaked.length}`);
     }
+    await pull(b, 60, 300);
+    await a.waitForFunction(
+        () => document.getElementById("fogshot-field")?.dataset.yourTurn === "true",
+        null,
+        { timeout: 20000 },
+    );
+    await pull(a, 10, 390);
+    await a.waitForFunction(
+        () => document.getElementById("fogshot-field")?.dataset.phase === "finished"
+            && document.getElementById("fogshot-field")?.dataset.result === "A",
+        null,
+        { timeout: 20000 },
+    );
+    await b.waitForFunction(
+        () => document.getElementById("fogshot-field")?.dataset.phase === "finished"
+            && document.getElementById("fogshot-field")?.dataset.result === "A",
+        null,
+        { timeout: 20000 },
+    );
+    const wonA = await read(a);
+    const wonB = await read(b);
+    if (!wonA.cap.includes("Result A") || !wonB.cap.includes("Result A") || wonA.ready !== "false" || wonB.ready !== "false") {
+        fail(`victory state did not reach both seats: ${JSON.stringify({ wonA, wonB })}`);
+    }
+    const generation = wonA.epoch;
+    await b.getByRole("button", { name: "Rematch" }).click();
+    await a.waitForFunction(
+        () => document.getElementById("fogshot-field")?.dataset.phase === "recon"
+            && document.getElementById("fogshot-field")?.dataset.result === "",
+        null,
+        { timeout: 15000 },
+    );
+    await b.waitForFunction(
+        (previous) => {
+            const field = document.getElementById("fogshot-field");
+            return field?.dataset.phase === "recon" && field?.dataset.epoch !== previous;
+        },
+        generation,
+        { timeout: 15000 },
+    );
+    const nextA = await read(a);
+    const nextB = await read(b);
+    if (nextA.phase !== "recon" || nextB.phase !== "recon" || nextA.result || nextB.result) {
+        fail(`rematch did not start a fresh generation: ${JSON.stringify({ nextA, nextB, generation })}`);
+    }
+    if (!(Number(nextA.epoch) > Number(generation)) || nextA.epoch !== nextB.epoch) {
+        fail(`epoch did not advance together: ${JSON.stringify({ nextA, nextB, generation })}`);
+    }
+    const stale = shots[shots.length - 1];
+    if (!stale) {
+        fail("no shot request was captured");
+    }
+    const replay = await a.request.fetch(stale.url, {
+        method: "POST",
+        headers: {
+            authorization: stale.headers.authorization,
+            "content-type": stale.headers["content-type"] || "application/json",
+        },
+        data: stale.body,
+    });
+    const replayText = await replay.text();
+    let replayCode = "";
+    try {
+        const wrapped = JSON.parse(replayText);
+        const inner = JSON.parse(wrapped.data.result);
+        replayCode = inner.code || "";
+    } catch (parseErr) {
+        replayCode = "";
+    }
+    await a.waitForTimeout(400);
+    const after = await read(a);
+    if (replayCode !== "epoch" || after.phase !== "recon" || after.epoch !== nextA.epoch) {
+        fail(`stale command was not rejected: ${replayCode} ${replayText.slice(0, 500)} ${JSON.stringify(after)}`);
+    }
+    console.log(JSON.stringify({
+        wonA: { phase: wonA.phase, result: wonA.result, epoch: wonA.epoch },
+        wonB: { phase: wonB.phase, result: wonB.result },
+        nextA: { phase: nextA.phase, epoch: nextA.epoch },
+        nextB: { phase: nextB.phase, epoch: nextB.epoch },
+    }));
 } catch (err) {
     try {
         console.error(JSON.stringify({ a: await read(a), b: await read(b) }));

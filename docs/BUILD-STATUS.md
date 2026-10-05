@@ -312,9 +312,39 @@ Conclusion: success. The log shows `jac 0.37.23 (Linux x86_64)`, `48 passed in 1
 
 Issue comments on #2, #3, #4, and #5 were not posted. `gh api` returned HTTP 403 `Resource not accessible by integration` for `POST /repos/CosmonautJones/fogshot/issues/2/comments`. The issues stay open. No comment URLs exist.
 
+## Victory and the far marker
+
+Seat A's own watch was carrying `far-a` at `87654.32`, a marker that is never drawn. Red run:
+
+```text
+JAC_TEST_STRICT=1 jac test tests/live_match_tests.jac -v
+```
+
+Result: `1 failed in 1.60s` at `assert "87654.32" not in flare_raw`. Projection now skips `role == "marker"`. The same file then passed. Fixing commit: `8abfcd4`.
+
+The two-browser script now continues through B's shell, A's core lob at canvas `(10, 390)`, both captions reading `Result A` with phase `finished` and `shot_ready` false, B's Rematch, epoch `1` to `2` on both seats, and a replay of the captured `loose_shot`. The replay's inner code was `epoch` and the new match stayed `recon`. Local command, against a clean `jac run`:
+
+```text
+FOGSHOT_PLAYWRIGHT=.jac/e2e/node_modules/playwright FOGSHOT_BROWSER_CHANNEL=chrome node tests/e2e/two_seats.mjs
+```
+
+Result: `two seats ok`. Seat A's function bodies in that run also omitted `87654.32`.
+
+The full local suite after that projection change was `48 passed in 3.96s`. `node --test tests/playback_client.test.mjs` was `7 passed`.
+
+## Hardening queue
+
+These were already fixed before this pass. They were not rewritten.
+
+- #2 server clock: `062dadc`. `JAC_TEST_STRICT=1 jac test tests/clock_authority_tests.jac -v` is `2 passed`. `watch_match` calls `server_now()` and ignores the client `now_ms` argument.
+- #3 command envelope: `8b2b414`. `tests/command_envelope_tests.jac` is `3 passed`, including an old epoch after rematch.
+- #4 shot transaction: `a197769`. `tests/transaction_tests.jac` is `2 passed` inside the `5 passed` run with the physics file. One worker. A concurrent HTTP shot-versus-shot race was not added.
+- #5 loop: impact `917a1a7`, timed path `4c3feb3`, both supports `937c380`, playback stop `f53ff41`, marker `8abfcd4`. The browser file now also plays A's win and the rematch. A live B-win was not played. `tests/aim_rules_tests.jac` still owns the rules-level `result == "B"` case. No human playtest was run.
+- #6 Part A: `scripts/verify.sh` and `.github/workflows/verify.yml` at `425039f`, green on `e1e33ee`. Part B guest accounts and a room policy are still the shared demo password and the one invite `fogshot`. JacHammer was not deployed. `jac hammer` is not a command in Jac 0.37.23. `jac scale deploy` exists and was not run. There is no credential and no remote target. See [RUNTIME.md](RUNTIME.md).
+
 ## Next task
 
-JacHammer is the remaining deployment blocker. This environment has no JacHammer credential and no remote application target, so no deploy was attempted and there is no hosted URL. Shared-password replacement and a room policy are still open under issue #6 Part B. One `jac run` process is the supported worker model. Do not treat localhost or the GitHub Actions runner as a deploy. Basic shots stay free. The four-objective economy is still the later milestone.
+The deployment blocker is unchanged: no JacHammer credential and no remote target. Do not treat localhost or GitHub Actions as a deploy. Shared-password replacement and an explicit room policy remain open. A live B-win and a human playtest were not done. Basic shots stay free. The four-objective economy is still the later milestone.
 
 ## Two outposts
 
