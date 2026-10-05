@@ -99,6 +99,9 @@ def project_view(
     exposed: list[any] = [];
     active = opened and now_ms < expiry_ms;
     for body in bodies {
+        if body.role == "marker" {
+            continue;
+        }
         if body.owner == seat {
             friendly.append(_visible(
                 body.id, body.x, body.y, body.w, body.h, body.angle, body.role, body.alive, body.health

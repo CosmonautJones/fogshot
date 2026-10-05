@@ -44,6 +44,8 @@ test "a canvas shell crosses the fog, collapses the post, and the reveal closes"
     assert _max_x(flare["path"]) > 20.0;
     assert "12345.67" not in flare_raw;
     assert "-9876.54" not in flare_raw;
+    assert "87654.32" not in flare_raw;
+    assert "far-a" not in flare_raw;
     other = take_shot(live, "player-b", "flare-b", 60.0, 300.0, 800.0, 400.0, 1.0, live.table.epoch, live.table.turn, live.table.revision, "flare");
     other_row = json.loads(other);
     assert other_row["ok"];
