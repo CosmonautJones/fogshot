@@ -1,4 +1,4 @@
-"""One shared match. A canvas pull becomes the Pymunk shot, and the wire is an allowlist."""
+"""One match per private room. A canvas pull becomes the Pymunk shot, and the wire is an allowlist."""
 
 import json;
 import math;
@@ -7,7 +7,7 @@ import from game.aim { launcher_for, release_pull }
 import from game.rules { MatchRules, accept_shot, copy_rules, resolve_cores }
 import from graph.supply { Cable, Site, assess }
 import from physics.pymunk_driver { BodyState, PhysicsWorld, SimOutcome }
-import from server.authority { ClaimResult, Table, append_commit, claim, reload_table, save_seats, submit }
+import from server.authority { ClaimResult, Table, append_commit, claim, note_seen, release_player, release_stale, reload_table, save_seats, submit }
 import from server.clock { server_now }
 import from server.views { SecretBody, project_view }
 
@@ -52,6 +52,32 @@ def _read_file(path):
     if not file.exists():
         return ""
     return file.read_text()
+
+def _fresh_code():
+    import secrets
+    return secrets.token_hex(3)
+
+def _code_ok(code):
+    text = str(code or "")
+    if len(text) != 6:
+        return False
+    for ch in text:
+        if ch not in "0123456789abcdef":
+            return False
+    return True
+
+def _room_store():
+    store = getattr(_room_store, "rooms", None)
+    if store is None:
+        store = {}
+        _room_store.rooms = store
+    return store
+
+def _remember_room(code, live):
+    _room_store()[str(code)] = live
+
+def _recall_room(code):
+    return _room_store().get(str(code))
 ::py::
 
 obj LiveMatch {
@@ -77,6 +103,7 @@ obj LiveMatch {
 }
 
 glob _shared: LiveMatch | None = None;
+glob ROOM_ROOT: str = "/tmp/fogshot-rooms";
 
 def _chain(owner: str, source_name: str, mast_name: str, core_name: str) -> tuple[Site, Site, Site] {
     source = Site(name=source_name, owner=owner, kind="source", intact=True);
@@ -153,9 +180,9 @@ def _arm(live: LiveMatch) -> None {
     _sync_post(live);
 }
 
-def boot_match(directory: str) -> LiveMatch {
+def boot_match(directory: str, invite: str = "fogshot") -> LiveMatch {
     Path(directory).mkdir(parents=True, exist_ok=True);
-    table = reload_table("fogshot", directory);
+    table = reload_table(invite, directory);
     live = LiveMatch(table=table, world=PhysicsWorld());
     side_a = _chain("A", "launcher-a", "mast-a", "core-a");
     side_b = _chain("B", "launcher-b", "mast-b", "core-b");
@@ -326,6 +353,42 @@ def shared_match() -> LiveMatch {
         _shared = boot_match(".fogshot-match");
     }
     return _shared as LiveMatch;
+}
+
+def open_room() -> str {
+    attempt = 0;
+    while attempt < 8 {
+        code = str(_fresh_code() as str);
+        if not (_code_ok(code) as bool) or Path(ROOM_ROOT + "/" + code).exists() {
+            attempt = attempt + 1;
+            continue;
+        }
+        live = boot_match(ROOM_ROOT + "/" + code, code);
+        _remember_room(code, live);
+        return code;
+    }
+    return "";
+}
+
+def room_match(code: str) -> any {
+    if not (_code_ok(code) as bool) {
+        return None;
+    }
+    found = _recall_room(code);
+    if found is not None {
+        return found;
+    }
+    directory = ROOM_ROOT + "/" + code;
+    if not Path(directory).exists() {
+        return None;
+    }
+    live = boot_match(directory, code);
+    _remember_room(code, live);
+    return live;
+}
+
+def _match_for(invite: str) -> any {
+    return room_match(invite);
 }
 
 def claim_player(live: LiveMatch, player_id: str) -> ClaimResult {
@@ -640,6 +703,7 @@ def _encode(
         "epoch": live.table.epoch,
         "turn": live.table.turn,
         "revision": live.table.revision,
+        "room": live.table.invite,
         "view": json.loads(json.dumps(view.__dict__))
     };
     return json.dumps(payload);
@@ -899,31 +963,66 @@ def rematch_room(live: LiveMatch, player_id: str) -> str {
     return watch(live, player_id, 0);
 }
 
-def:protect play_again(invite: str) -> str {
-    if invite != "fogshot" {
-        return "{\"ok\": false, \"code\": \"unauthenticated\", \"seat\": \"\"}";
+def _closed() -> str {
+    return "{\"ok\": false, \"code\": \"unauthenticated\", \"seat\": \"\"}";
+}
+
+def:protect create_room() -> str {
+    code = open_room();
+    if code == "" {
+        return "{\"ok\": false, \"code\": \"full\", \"room\": \"\"}";
     }
-    return rematch_room(shared_match(), str(jid(root)));
+    return "{\"ok\": true, \"code\": \"\", \"room\": \"" + code + "\"}";
+}
+
+def:protect release_seat(invite: str) -> str {
+    found = _match_for(invite);
+    if found is None {
+        return _closed();
+    }
+    live = found as LiveMatch;
+    release_player(live.table, str(jid(root)));
+    return "{\"ok\": true, \"code\": \"released\", \"seat\": \"\"}";
+}
+
+def:protect play_again(invite: str) -> str {
+    found = _match_for(invite);
+    if found is None {
+        return _closed();
+    }
+    live = found as LiveMatch;
+    player = str(jid(root));
+    release_stale(live.table, server_now());
+    note_seen(live.table, player, server_now());
+    return rematch_room(live, player);
 }
 
 def:protect join_seat(invite: str) -> str {
-    if invite != "fogshot" {
-        return "{\"ok\": false, \"code\": \"unauthenticated\", \"seat\": \"\"}";
+    found = _match_for(invite);
+    if found is None {
+        return _closed();
     }
+    live = found as LiveMatch;
     player = str(jid(root));
-    live = shared_match();
+    release_stale(live.table, server_now());
     claimed = claim(live.table, player, invite);
     if not claimed.ok {
         return _encode(live, player, 0, False, claimed.code, "", False, 0.0);
     }
+    note_seen(live.table, player, server_now());
     return watch(live, player, 0);
 }
 
 def:protect watch_match(invite: str, now_ms: int) -> str {
-    if invite != "fogshot" {
-        return "{\"ok\": false, \"code\": \"unauthenticated\", \"seat\": \"\"}";
+    found = _match_for(invite);
+    if found is None {
+        return _closed();
     }
-    return watch(shared_match(), str(jid(root)), server_now());
+    live = found as LiveMatch;
+    player = str(jid(root));
+    release_stale(live.table, server_now());
+    note_seen(live.table, player, server_now());
+    return watch(live, player, server_now());
 }
 
 def:protect loose_shot(
@@ -939,12 +1038,17 @@ def:protect loose_shot(
     canvas_h: float,
     dpr: float
 ) -> str {
-    if invite != "fogshot" {
-        return "{\"ok\": false, \"code\": \"unauthenticated\", \"seat\": \"\"}";
+    found = _match_for(invite);
+    if found is None {
+        return _closed();
     }
+    live = found as LiveMatch;
+    player = str(jid(root));
+    release_stale(live.table, server_now());
+    note_seen(live.table, player, server_now());
     return take_shot(
-        shared_match(),
-        str(jid(root)),
+        live,
+        player,
         command_id,
         pointer_x,
         pointer_y,

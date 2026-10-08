@@ -36,9 +36,10 @@ jac test \
     tests/playback_tests.jac \
     tests/outpost_tests.jac \
     tests/b_win_tests.jac \
+    tests/room_tests.jac \
     -v
 
-node --test tests/playback_client.test.mjs
+node --test tests/playback_client.test.mjs tests/room_client.test.mjs
 
 playwright_dir="${root}/.jac/e2e"
 if ! NODE_PATH="${playwright_dir}/node_modules" node -e "require.resolve('playwright')" >/dev/null 2>&1; then
@@ -62,5 +63,7 @@ if ! curl -fsS -o /dev/null --max-time 2 http://127.0.0.1:8000/; then
     done
     curl -fsS -o /dev/null --max-time 2 http://127.0.0.1:8000/
 fi
+
+node tests/e2e/shot_race.mjs
 
 FOGSHOT_PLAYWRIGHT="${playwright_dir}/node_modules/playwright" node tests/e2e/two_seats.mjs

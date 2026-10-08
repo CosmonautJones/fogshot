@@ -432,3 +432,31 @@ JAC_TEST_STRICT=1 jac test tests/clock_authority_tests.jac tests/live_match_test
 Result: `38 passed in 6.16s`.
 
 HTTP, after a fresh `jac run` on `http://127.0.0.1:8001`, two new users, invite `fogshot`. `POST /function/loose_shot` sent `now_ms` `9000000000000`. `reveal_until` was `1791134749644`, about 3014 ms after the wall clock, not the client stamp. Immediate `POST /function/watch_match` with `now_ms` 0, 1000, and `9000000000000` all kept that same deadline and an open reveal. After 3.3 seconds the same three client times all returned `reveal_until` 0, reveal closed, and no `enemy-post`. Retrying the same command id stayed closed. No token is recorded here.
+
+## Private rooms, B's win, and one live shot
+
+Recorded: 2026-10-08. Branch `cursor/first-playable-66d6`, on top of `8784dfb`.
+
+Seat B can win. A's core sits at `(30.61, 4.05)`, on the approach B's shell can reach. The first `tests/b_win_tests.jac` run failed because `result` was not `B` while that core was still at `4.25`. After the move, the open impact reveal still contained `core-a`, so the assertion moved to a watch after `reveal_until`. The two-browser script then plays that lob, pointer `(20, 390)`, through rematch. Both seats return to recon on a shared later epoch.
+
+Two `POST /function/loose_shot` calls from the same seat, sent together, produce one flare and one `busy`. The watched turn stays `1`. A second room stays at turn `0`. Invite `fogshot` is `unauthenticated`.
+
+`tests/room_tests.jac` failed first in this session with `1 failed in 3.57s` at `seated_right.seat == "B"`. The first claim in a room is seat A. The test now claims both chairs in the second room. `tests/room_client.test.mjs` requires the client source to drop `fogshot-seat` and the single invite. After that edit it passed.
+
+Each browser stores its own password in `sessionStorage`. The first browser calls `create_room` and keeps a 6-character code. The second joins `?room=` that code. `release_seat` clears the caller. A seat with no watch for more than 30000 ms is released; the boundary at exactly 30000 ms stays. Room files live in `/tmp/fogshot-rooms` so a seat write does not reload `jac run`. A shot in one room leaves the other at turn 0.
+
+`jac scale deploy` exists on Jac 0.37.23, including `--dry-run --show-yaml`. It was not run. There is no credential and no target. That is the deploy blocker. JacHammer was not used.
+
+Green, one `jac run` already serving port 8000, Chrome channel, `DISPLAY=:1`:
+
+```text
+FOGSHOT_BROWSER_CHANNEL=chrome DISPLAY=:1 bash scripts/verify.sh
+```
+
+`jac 0.37.23`. Jac: `50 passed in 3.09s`. Node: `8 passed` (`tests/playback_client.test.mjs` and `tests/room_client.test.mjs`). Then `shot race ok` and `two seats ok`. Exit 0.
+
+The race line was `{"codes":[{"ok":true,"code":"","weapon":"flare","turn":1,"phase":"recon"},{"ok":false,"code":"busy","weapon":"","turn":0,"phase":"recon"}],"watch":{"phase":"recon","turn":1,"seat":"B","room":"aa71f0"},"quiet":{"phase":"recon","turn":0,"seat":"A","room":"23f493"}}`.
+
+The browser line ended `{"wonA":{"phase":"finished","result":"A","epoch":"1"},"wonB":{"phase":"finished","result":"A"},"beatA":{"phase":"finished","result":"B"},"beatB":{"phase":"finished","result":"B","epoch":"2"},"freshA":{"phase":"recon","epoch":"3"},"freshB":{"phase":"recon","epoch":"3"}}` and `two seats ok`. Both captions named the same room `7602a0`.
+
+No hosted URL. No human playtest beyond these browsers. The four-objective economy is still later.

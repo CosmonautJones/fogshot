@@ -41,13 +41,25 @@ async function call(token, name, args) {
 const stamp = Date.now();
 const tokenA = await register(`race-a-${stamp}@example.com`, `pw-a-${stamp}-isolated`);
 const tokenB = await register(`race-b-${stamp}@example.com`, `pw-b-${stamp}-isolated`);
-const joinedA = await call(tokenA, "join_seat", { invite: "fogshot" });
-const joinedB = await call(tokenB, "join_seat", { invite: "fogshot" });
-if (joinedA.parsed.seat !== "A" || joinedB.parsed.seat !== "B") {
-    fail(`seats were not free: ${JSON.stringify({ a: joinedA.parsed.seat, b: joinedB.parsed.seat, codeA: joinedA.parsed.code, codeB: joinedB.parsed.code })}`);
+const denied = await call(tokenA, "join_seat", { invite: "fogshot" });
+if (denied.parsed.ok || denied.parsed.code !== "unauthenticated") {
+    fail(`the shared invite was accepted: ${JSON.stringify(denied.parsed)}`);
+}
+const created = await call(tokenA, "create_room", {});
+const quieted = await call(tokenB, "create_room", {});
+const room = created.parsed.room || "";
+const quiet = quieted.parsed.room || "";
+if (!/^[0-9a-f]{6}$/.test(room) || !/^[0-9a-f]{6}$/.test(quiet) || room === quiet) {
+    fail(`rooms were not isolated: ${JSON.stringify({ created: created.parsed, quieted: quieted.parsed })}`);
+}
+const joinedA = await call(tokenA, "join_seat", { invite: room });
+const joinedB = await call(tokenB, "join_seat", { invite: room });
+const parked = await call(tokenA, "join_seat", { invite: quiet });
+if (joinedA.parsed.seat !== "A" || joinedB.parsed.seat !== "B" || parked.parsed.seat !== "A" || parked.parsed.room !== quiet) {
+    fail(`seats were not free: ${JSON.stringify({ a: joinedA.parsed, b: joinedB.parsed, parked: parked.parsed })}`);
 } else {
     const shot = (commandId) => call(tokenA, "loose_shot", {
-        invite: "fogshot",
+        invite: room,
         command_id: commandId,
         epoch: 1,
         expected_turn: 0,
@@ -66,12 +78,17 @@ if (joinedA.parsed.seat !== "A" || joinedB.parsed.seat !== "B") {
     const rows = [first.parsed, second.parsed];
     const accepted = rows.filter((row) => row.ok && row.weapon === "flare" && !row.code);
     const settled = rows.filter((row) => row.code === "turn" || row.code === "busy" || row.code === "revision" || (row.ok && row.code === ""));
-    const watched = await call(tokenB, "watch_match", { invite: "fogshot", now_ms: 0 });
+    const watched = await call(tokenB, "watch_match", { invite: room, now_ms: 0 });
+    const untouched = await call(tokenA, "watch_match", { invite: quiet, now_ms: 0 });
     console.log(JSON.stringify({
         codes: rows.map((row) => ({ ok: row.ok, code: row.code || "", weapon: row.weapon, turn: row.turn, phase: row.phase })),
-        watch: { phase: watched.parsed.phase, turn: watched.parsed.turn, seat: watched.parsed.seat },
+        watch: { phase: watched.parsed.phase, turn: watched.parsed.turn, seat: watched.parsed.seat, room: watched.parsed.room },
+        quiet: { phase: untouched.parsed.phase, turn: untouched.parsed.turn, seat: untouched.parsed.seat, room: untouched.parsed.room },
     }));
-    if (accepted.length !== 1 || watched.parsed.phase !== "recon" || watched.parsed.turn !== 1) {
+    if (untouched.parsed.room !== quiet || untouched.parsed.turn !== 0 || untouched.parsed.phase !== "recon") {
+        fail(`the quiet room moved: ${JSON.stringify(untouched.parsed)}`);
+    }
+    if (accepted.length !== 1 || watched.parsed.phase !== "recon" || watched.parsed.turn !== 1 || watched.parsed.room !== room) {
         fail(`both shots simulated or neither did: accepted ${accepted.length}, phase ${watched.parsed.phase}, turn ${watched.parsed.turn}`);
     }
     if (settled.length !== 2) {

@@ -30,6 +30,7 @@ coverage/
 *.db
 runtime-data/
 .fogshot-match/
+.fogshot-rooms/
 private-replays/
 *.log
 test-results/

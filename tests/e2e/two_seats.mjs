@@ -30,6 +30,7 @@ async function read(page) {
             result: field?.dataset.result || "",
             epoch: field?.dataset.epoch || "",
             ready: field?.dataset.shotReady || "",
+            room: field?.dataset.room || "",
         };
     });
 }
@@ -96,16 +97,31 @@ b.on("response", async (res) => {
 try {
     await a.goto(url, { waitUntil: "domcontentloaded" });
     await a.waitForFunction(
-        () => document.getElementById("fogshot-field")?.dataset.seat === "A",
+        () => {
+            const field = document.getElementById("fogshot-field");
+            const room = field?.dataset.room || "";
+            return field?.dataset.seat === "A" && /^[0-9a-f]{6}$/.test(room);
+        },
         null,
         { timeout: 20000 },
     );
-    await b.goto(url, { waitUntil: "domcontentloaded" });
+    const room = await a.evaluate(() => document.getElementById("fogshot-field").dataset.room);
+    const joined = new URL(url);
+    joined.searchParams.set("room", room);
+    await b.goto(joined.toString(), { waitUntil: "domcontentloaded" });
     await b.waitForFunction(
-        () => document.getElementById("fogshot-field")?.dataset.seat === "B",
-        null,
+        (code) => {
+            const field = document.getElementById("fogshot-field");
+            return field?.dataset.seat === "B" && field?.dataset.room === code;
+        },
+        room,
         { timeout: 20000 },
     );
+    const shared = await read(a);
+    const other = await read(b);
+    if (shared.room !== room || other.room !== room || !shared.cap.includes(`Room ${room}`) || !other.cap.includes(`Room ${room}`)) {
+        fail(`the two seats did not share one private room: ${JSON.stringify({ room, shared, other })}`);
+    }
     await pull(a, 20, 300);
     await pull(b, 60, 300);
     await a.waitForFunction(
@@ -291,6 +307,7 @@ try {
 } catch (err) {
     try {
         console.error(JSON.stringify({ a: await read(a), b: await read(b) }));
+        console.error(bodies.slice(-3).map((text) => text.slice(0, 700)).join("\n---\n"));
     } catch (readErr) {
         console.error(String(readErr));
     }

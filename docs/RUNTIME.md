@@ -114,7 +114,7 @@ Two Playwright contexts joined invite `fogshot`. The second context's response b
 
 ## Hosting
 
-This Jac 0.37.23 install has no `jac hammer` command. `jac --help` lists `jac scale` for platform deployments. `jac scale --help` shows `jac scale deploy`, including `jac scale deploy --dry-run --show-yaml`. None of those were run. There is no JacHammer credential, no configured platform target, and no remote application, so a deploy is not authorized. When both a credential and a target exist, the toolchain command to inspect first is `jac scale deploy --dry-run --show-yaml`, then `jac scale deploy` only with that authorization. Until then the runnable check is `bash scripts/verify.sh` after the pinned installer and `jac install`. One `jac run` process is the worker. The match directory is `.fogshot-match`.
+This Jac 0.37.23 install has no `jac hammer` command. `jac --help` lists `jac scale` for platform deployments. `jac scale --help` shows `jac scale deploy`, including `jac scale deploy --dry-run --show-yaml`. None of those were run. There is no JacHammer credential, no configured platform target, and no remote application, so a deploy is not authorized. When both a credential and a target exist, the toolchain command to inspect first is `jac scale deploy --dry-run --show-yaml`, then `jac scale deploy` only with that authorization. Until then the runnable check is `bash scripts/verify.sh` after the pinned installer and `jac install`. One `jac run` process is the worker. A private room is a match directory under `/tmp/fogshot-rooms/<code>`. `jac scale deploy` was not run.
 
 ## Not claimed
 

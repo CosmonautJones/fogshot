@@ -10,11 +10,15 @@ import from pathlib { Path }
 import from game.rules { MatchRules, accept_shot }
 import from server.views { SecretBody, project_view }
 
+glob SEAT_TIMEOUT_MS: int = 30000;
+
 obj Table {
     has invite: str;
     has directory: str;
     has seat_a: str = "";
     has seat_b: str = "";
+    has seen_a: int = 0;
+    has seen_b: int = 0;
     has rules: MatchRules = MatchRules();
     has shots: int = 0;
     has turn: int = 0;
@@ -83,7 +87,9 @@ def _write_seats(table: Table) -> None {
     _write_text(_seats_path(table.directory), json.dumps({
         "A": table.seat_a,
         "B": table.seat_b,
-        "epoch": table.epoch
+        "epoch": table.epoch,
+        "seen_a": table.seen_a,
+        "seen_b": table.seen_b
     }));
 }
 
@@ -156,6 +162,49 @@ def write_commit_line(table: Table, command_id: str, payload: str) -> None {
     });
     current = _read_text(_journal_path(table.directory));
     _write_text(_journal_path(table.directory), current + line + "\n");
+}
+
+def note_seen(table: Table, player_id: str, now_ms: int) -> None {
+    if player_id != "" and player_id == table.seat_a {
+        table.seen_a = now_ms;
+        _write_seats(table);
+    }
+    if player_id != "" and player_id == table.seat_b {
+        table.seen_b = now_ms;
+        _write_seats(table);
+    }
+}
+
+def release_stale(table: Table, now_ms: int) -> bool {
+    released = False;
+    if table.seat_a != "" and now_ms - table.seen_a > SEAT_TIMEOUT_MS {
+        table.seat_a = "";
+        released = True;
+    }
+    if table.seat_b != "" and now_ms - table.seen_b > SEAT_TIMEOUT_MS {
+        table.seat_b = "";
+        released = True;
+    }
+    if released {
+        _write_seats(table);
+    }
+    return released;
+}
+
+def release_player(table: Table, player_id: str) -> bool {
+    released = False;
+    if player_id != "" and player_id == table.seat_a {
+        table.seat_a = "";
+        released = True;
+    }
+    if player_id != "" and player_id == table.seat_b {
+        table.seat_b = "";
+        released = True;
+    }
+    if released {
+        _write_seats(table);
+    }
+    return released;
 }
 
 def claim(table: Table, player_id: str, invite: str) -> ClaimResult {
@@ -289,6 +338,13 @@ def reload_table(invite: str, directory: str) -> Table {
             table.epoch = int(seats["epoch"]);
         } except Exception {
             table.epoch = 1;
+        }
+        try {
+            table.seen_a = int(seats["seen_a"]);
+            table.seen_b = int(seats["seen_b"]);
+        } except Exception {
+            table.seen_a = 0;
+            table.seen_b = 0;
         }
     }
     raw = _read_text(_journal_path(directory));

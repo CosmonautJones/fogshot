@@ -112,7 +112,24 @@ function paint(scene, pull) {
     }
 }
 
+export function roomFromLocation() {
+    const code = new URLSearchParams(window.location.search).get("room") || "";
+    return /^[0-9a-f]{6}$/.test(code) ? code : "";
+}
+
+export function publishRoom(code) {
+    if (!/^[0-9a-f]{6}$/.test(code || "")) {
+        return;
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.set("room", code);
+    window.history.replaceState(null, "", `${url.pathname}?${url.searchParams.toString()}`);
+}
+
 function remember(parent, data) {
+    if (data.room) {
+        parent.dataset.room = data.room;
+    }
     parent.dataset.seat = data.seat || "";
     parent.dataset.phase = data.phase || "";
     parent.dataset.weapon = data.weapon || "";

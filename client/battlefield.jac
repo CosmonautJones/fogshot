@@ -2,18 +2,18 @@
 
 import from "react" { useEffect }
 import from "@jac/runtime" { SignupResult, jacLogin, jacSignup }
-import from "./mount_field.js" { mountField }
+import from "./mount_field.js" { mountField, publishRoom, roomFromLocation }
 import from "./playback.js" { sampleAt, shellWord }
-import from server.live { join_seat, loose_shot, play_again, watch_match }
+import from server.live { create_room, join_seat, loose_shot, play_again, release_seat, watch_match }
 
-glob INVITE: str = "fogshot";
-glob PASSWORD: str = "fogshot-seat";
 glob _set_caption: any = None;
 glob _apply: any = None;
 glob _timer: any = None;
 glob _joined: bool = False;
 glob _joining: bool = False;
 glob _email_ready: str = "";
+glob _password_ready: str = "";
+glob _room: str = "";
 glob _epoch: int = 1;
 glob _turn: int = 0;
 glob _revision: int = 0;
@@ -42,6 +42,27 @@ def _email() -> str {
     return _email_ready;
 }
 
+def _password() -> str {
+    if _password_ready != "" {
+        return _password_ready;
+    }
+    store = (window as any).sessionStorage;
+    saved = "";
+    if store {
+        saved = str(store.getItem("fogshot-password") or "");
+    }
+    if saved != "" and saved != "None" {
+        _password_ready = saved;
+        return _password_ready;
+    }
+    token = (crypto as any).randomUUID() as str;
+    _password_ready = "pw-" + token;
+    if store {
+        store.setItem("fogshot-password", _password_ready);
+    }
+    return _password_ready;
+}
+
 def _command() -> str {
     token = (crypto as any).randomUUID() as str;
     return "cmd-" + str(Date.now()) + "-" + token;
@@ -66,7 +87,7 @@ def _note(raw: str) -> None {
     _remember(parsed);
     supply = "on" if parsed.own_powered != False else "dark";
     shell = shellWord(parsed.shot_ready != False, parsed.your_turn == True);
-    text = "Seat " + str(parsed.seat) + " / " + str(parsed.phase) + " / " + str(parsed.weapon) + " / supply " + supply + " / shell " + shell + ". Pull back from the launcher. The shot is the server result.";
+    text = "Room " + _room + ". Seat " + str(parsed.seat) + " / " + str(parsed.phase) + " / " + str(parsed.weapon) + " / supply " + supply + " / shell " + shell + ". Pull back from the launcher. The shot is the server result.";
     if parsed.result {
         text = text + " Result " + str(parsed.result) + ".";
     }
@@ -84,7 +105,7 @@ async def _again() -> None {
     _pending_weapon = "";
     raw: str = "";
     try {
-        raw = await play_again(INVITE);
+        raw = await play_again(_room);
     } except Exception {
         if _set_caption {
             _set_caption.call(None, "Rematch was rejected.");
@@ -103,11 +124,13 @@ async def _join() -> None {
     }
     _joining = True;
     email = _email();
+    password = _password();
     signup_result: SignupResult | None = None;
     login_ok: bool = False;
     joined: str = "";
-    signup_result = await jacSignup(email, PASSWORD);
-    login_ok = await jacLogin(email, PASSWORD);
+    created: str = "";
+    signup_result = await jacSignup(email, password);
+    login_ok = await jacLogin(email, password);
     if not login_ok {
         _joining = False;
         if _set_caption {
@@ -115,7 +138,22 @@ async def _join() -> None {
         }
         return;
     }
-    joined = await join_seat(INVITE);
+    code = str(roomFromLocation());
+    if code == "" {
+        created = await create_room();
+        opened = JSON.parse(created) as any;
+        code = str(opened.room or "");
+        if code == "" or code == "None" {
+            _joining = False;
+            if _set_caption {
+                _set_caption.call(None, "The room was not created.");
+            }
+            return;
+        }
+        publishRoom(code);
+    }
+    _room = code;
+    joined = await join_seat(_room);
     _joined = True;
     if _apply {
         _apply.call(None, joined);
@@ -132,7 +170,7 @@ async def _poll() -> None {
     }
     raw: str = "";
     try {
-        raw = await watch_match(INVITE, 0);
+        raw = await watch_match(_room, 0);
     } except Exception {
         return;
     }
@@ -153,7 +191,7 @@ async def _release(px: float, py: float) -> None {
     fired: str = "";
     try {
         fired = await loose_shot(
-            INVITE,
+            _room,
             _pending,
             _epoch,
             _turn,
@@ -201,7 +239,12 @@ def:pub Battlefield -> JsxElement {
         };
         _join();
         return lambda {
+            room = _room;
             _joined = False;
+            _room = "";
+            if room != "" {
+                release_seat(room);
+            }
             if _timer is not None {
                 clearInterval(_timer);
                 _timer = None;
