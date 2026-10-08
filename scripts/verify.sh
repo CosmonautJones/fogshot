@@ -35,6 +35,7 @@ jac test \
     tests/impact_reveal_tests.jac \
     tests/playback_tests.jac \
     tests/outpost_tests.jac \
+    tests/b_win_tests.jac \
     -v
 
 node --test tests/playback_client.test.mjs

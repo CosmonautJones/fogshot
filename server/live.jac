@@ -102,7 +102,9 @@ def _arm(live: LiveMatch) -> None {
     world.add_braced_post("post-a", 26.0, 0.0, 0.16, 2.0, -0.15, 0.5, 0.22);
     world.add_fixture("spur-b", 18.45, 1.55, 0.5, 0.45, 0.05, "spur");
     world.add_static_box("core-b", 11.2, 2.6, 0.8, 0.8, 0.4);
-    world.add_static_box("core-a", 4.25, 3.25, 0.8, 0.8, 0.4);
+    # B's pull-back ends at the arena edge, so a shell stops on the mast near x=26.
+    # A's core sits on that approach, at 30.61, where the lob (20, 390) arrives.
+    world.add_static_box("core-a", 30.61, 4.05, 0.8, 0.8, 0.4);
     live.world = world;
     live.core_a_alive = True;
     live.core_b_alive = True;
@@ -112,7 +114,7 @@ def _arm(live: LiveMatch) -> None {
             angle=0.0, role="launcher", alive=True, health=1.0
         ),
         SecretBody(
-            id="core-a", owner="A", x=4.25, y=3.25, w=0.8, h=0.8,
+            id="core-a", owner="A", x=30.61, y=4.05, w=0.8, h=0.8,
             angle=0.0, role="core", alive=True, health=0.4
         ),
         SecretBody(

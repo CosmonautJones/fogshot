@@ -227,11 +227,66 @@ try {
     if (replayCode !== "epoch" || after.phase !== "recon" || after.epoch !== nextA.epoch) {
         fail(`stale command was not rejected: ${replayCode} ${replayText.slice(0, 500)} ${JSON.stringify(after)}`);
     }
+    await pull(a, 20, 300);
+    await pull(b, 60, 300);
+    await a.waitForFunction(
+        () => document.getElementById("fogshot-field")?.dataset.phase === "combat"
+            && document.getElementById("fogshot-field")?.dataset.yourTurn === "true",
+        null,
+        { timeout: 20000 },
+    );
+    await pull(a, 20, 300);
+    await b.waitForFunction(
+        () => document.getElementById("fogshot-field")?.dataset.yourTurn === "true",
+        null,
+        { timeout: 20000 },
+    );
+    await pull(b, 20, 390);
+    await b.waitForFunction(
+        () => document.getElementById("fogshot-field")?.dataset.phase === "finished"
+            && document.getElementById("fogshot-field")?.dataset.result === "B",
+        null,
+        { timeout: 20000 },
+    );
+    await a.waitForFunction(
+        () => document.getElementById("fogshot-field")?.dataset.phase === "finished"
+            && document.getElementById("fogshot-field")?.dataset.result === "B",
+        null,
+        { timeout: 20000 },
+    );
+    const beatA = await read(a);
+    const beatB = await read(b);
+    if (!beatA.cap.includes("Result B") || !beatB.cap.includes("Result B") || beatA.ready !== "false" || beatB.ready !== "false") {
+        fail(`seat B's win did not reach both seats: ${JSON.stringify({ beatA, beatB })}`);
+    }
+    const beaten = beatB.epoch;
+    await a.getByRole("button", { name: "Rematch" }).click();
+    await b.waitForFunction(
+        (previous) => {
+            const field = document.getElementById("fogshot-field");
+            return field?.dataset.phase === "recon" && field?.dataset.result === "" && field?.dataset.epoch !== previous;
+        },
+        beaten,
+        { timeout: 15000 },
+    );
+    await a.waitForFunction(
+        () => document.getElementById("fogshot-field")?.dataset.phase === "recon"
+            && document.getElementById("fogshot-field")?.dataset.result === "",
+        null,
+        { timeout: 15000 },
+    );
+    const freshA = await read(a);
+    const freshB = await read(b);
+    if (freshA.epoch !== freshB.epoch || !(Number(freshA.epoch) > Number(beaten)) || freshA.result || freshB.result) {
+        fail(`rematch after B's win did not start a new generation: ${JSON.stringify({ freshA, freshB, beaten })}`);
+    }
     console.log(JSON.stringify({
         wonA: { phase: wonA.phase, result: wonA.result, epoch: wonA.epoch },
         wonB: { phase: wonB.phase, result: wonB.result },
-        nextA: { phase: nextA.phase, epoch: nextA.epoch },
-        nextB: { phase: nextB.phase, epoch: nextB.epoch },
+        beatA: { phase: beatA.phase, result: beatA.result },
+        beatB: { phase: beatB.phase, result: beatB.result, epoch: beatB.epoch },
+        freshA: { phase: freshA.phase, epoch: freshA.epoch },
+        freshB: { phase: freshB.phase, epoch: freshB.epoch },
     }));
 } catch (err) {
     try {
