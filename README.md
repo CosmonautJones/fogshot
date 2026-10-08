@@ -4,11 +4,11 @@
 
 A Jac-first multiplayer physics-siege game: pull back, launch into a hidden outpost, remember the brief glimpse, and bring its infrastructure down.
 
-**Current status: repository bootstrap and design only. No playable game or passing gameplay tests are included yet.** See [BUILD-STATUS](docs/BUILD-STATUS.md).
+**Current status: Jac 0.37.23 serves a Phaser 3.90.0 field at `jac run`. A pull submits to one shared match, the drawn shot is the Pymunk path, a hitting shell collapses the braced post, and the impact reveal closes. A second browser joins that match and does not receive the sentinel coordinates. The supply walk is still not tied to the break. JacHammer has not been deployed.** See [BUILD-STATUS](docs/BUILD-STATUS.md) and [RUNTIME](docs/RUNTIME.md).
 
 ## Selected direction
 
-Jac owns authored game rules, scene orchestration, input conversion, structural-damage policy, turn authority, visibility projection, and the supply graph. Phaser is the proposed browser presentation dependency. Pymunk is the first candidate for trusted low-level 2D physics, pending an actual Jac integration test. JacHammer is the intended initial hosting target, not a completed deployment.
+Jac owns authored game rules, scene orchestration, input conversion, structural-damage policy, turn authority, visibility projection, and the supply graph. Phaser 3.90.0 is the pinned browser presentation dependency. Pymunk 7.3.0 is the trusted low-level 2D solver, called from Jac through a `::py::` import seam. JacHammer is the intended initial hosting target, not a completed deployment.
 
 This is not a JavaScript game with a cosmetic Jac endpoint. It is also not a claim that the third-party renderer or solver was written in Jac.
 
@@ -22,6 +22,7 @@ Two independent browser sessions. One launcher and one supported objective per s
 - [Architecture decision](docs/adr/0001-jac-first-authoritative-game.md)
 - [First-playable implementation plan](docs/FIRST-PLAYABLE.md)
 - [Build status and evidence](docs/BUILD-STATUS.md)
+- [Jac 0.37.23 evidence for later agents](docs/JAC-0.37-EVIDENCE.md)
 - [Agent working agreement](AGENTS.md)
 
 ## Development

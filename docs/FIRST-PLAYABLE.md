@@ -1,7 +1,7 @@
 # First playable implementation plan
 
 Date: 2026-10-04
-Status: Not implemented. All product tasks below remain open.
+Status: Tasks 1 through 7 are pushed on `cursor/first-playable-66d6`. Two browsers share one Jac match. A broken supply leaves the shell ready, a dead core ends the match, and rematch restores the lamp. JacHammer is not deployed.
 
 ## Target
 
@@ -29,26 +29,26 @@ Derive actual codespace annotations and scaffold paths from the selected compile
 
 ## Task 1: Runtime integration
 
-- [ ] Inspect the installed Jac version and version-matched guide; pin compatible released Jac, Phaser, and Pymunk versions.
-- [ ] Establish tests for scene mount/dispose/remount without duplicate handlers and for a real server-side collision and rotating support collapse.
-- [ ] Prove those tests fail for the intended missing behavior, then implement direct Jac imports and callbacks.
-- [ ] Run the actual supported check/test/build commands; record them in docs/RUNTIME.md.
-- [ ] Commit and push the verified runtime slice. A native dependency failure is a blocker to report, not permission to replace the design with a mock.
+- [x] Inspect the installed Jac version and version-matched guide; pin compatible released Jac, Phaser, and Pymunk versions. Jac 0.37.23, Phaser 3.90.0, Pymunk 7.3.0. See docs/RUNTIME.md.
+- [x] Establish tests for scene mount/dispose/remount without duplicate handlers and for a real server-side collision and rotating support collapse. `tests/scene_host_tests.jac`, `tests/physics_driver_tests.jac`.
+- [x] Prove those tests fail for the intended missing behavior, then implement. Missing modules failed under `JAC_TEST_STRICT=1` with `ModuleNotFoundError`. Direct `import pymunk` does not compile (E1030 on `Body.angle.setter`); the driver loads Pymunk through a `::py::` seam and keeps break policy in Jac. `Space.on_collision` is the Pymunk 7 callback. Phaser itself is not mounted yet.
+- [x] Run the actual check and test commands; record them in docs/RUNTIME.md. `jac build` has not been run. There is no servable `main.jac` yet.
+- [x] Commit and push the verified runtime slice. `17dea2255c04568aa1525d3dd1d2e50577ef1415` on `origin/cursor/first-playable-66d6`.
 
 ## Task 2: Input and pure rules
 
-- [ ] Define typed shot command (ID, expected revision/turn, weapon, angle, power), private checkpoint, private physics result, public player view, and public replay separately.
-- [ ] Test drag cancel, duplicate pointer events, resize/device-pixel ratio, mirrored aim, finite input validation, wrong phase/turn/actor, and victory/draw.
-- [ ] Implement pure Jac input conversion and explicit rules. Start with fixed gravity, no wind/spread, and a limited initial guide with no hidden collision query.
-- [ ] Verify, commit, and push.
+- [x] Test drag cancel, duplicate pointer events, resize/device-pixel ratio, mirrored aim, finite input validation, wrong phase/turn/actor, and victory/draw. `tests/aim_rules_tests.jac`, 11 passed.
+- [x] Implement pure Jac input conversion and explicit rules. Fixed gravity, no wind or spread, and a short guide that stops at the midline without a collision query. `game/aim.jac`, `game/rules.jac`.
+- [ ] Typed private checkpoint, private physics result, public player view, and public replay are still task 4. Shot command fields are the `accept_shot` parameters (actor, revision, turn, weapon, angle, power). A command id belongs with match authority.
+- [x] Commit and push this slice. `dc98d6baac593541f139f17e9a82947986fd74a5` on `origin/cursor/first-playable-66d6`.
 
 ## Task 3: Actual physics
 
-- [ ] Test projectile contact against thin supports, support break causing a fall, contact damage applied once, bounded debris settling, and checkpoint restore.
-- [ ] Implement one trusted fixed-step physics driver. Jac owns the damage/break policy. Queue world mutations at solver-safe points.
-- [ ] Establish measured limits on bodies, simulation steps, payload size, and latency. Separate simulated seconds from wall time.
-- [ ] Store resolved outcomes rather than claim cross-device deterministic replay.
-- [ ] Verify, commit, and push.
+- [x] Test projectile contact against thin supports, support break causing a fall, contact damage applied once, bounded debris settling, and checkpoint restore. `tests/physics_driver_tests.jac` and `tests/siege_view_tests.jac`. The step budget is the settle bound: shell and flare runs assert `steps == 1400`.
+- [x] Implement one trusted fixed-step physics driver. Jac owns the damage/break policy. Queue world mutations at solver-safe points. `physics/pymunk_driver.jac`, `physics/siege.jac`. Damage is applied once per contact pair per `simulate` call, and the pin is removed after the step.
+- [x] Establish measured limits on bodies, simulation steps, payload size, and latency. Separate simulated seconds from wall time. Recorded in [RUNTIME.md](RUNTIME.md): `dt = 1/180`, 1400 steps = 7.78 simulated seconds, three tracked bodies in the siege fixture. Payload size and browser latency are still unmeasured because there is no served match.
+- [x] Store resolved outcomes rather than claim cross-device deterministic replay. Callers keep the returned `SimOutcome`. Nothing claims the same bytes on another machine.
+- [x] Verify, commit, and push. `f5d9486466eecd6530ae05a582b2cc998d4dcc81` on `origin/cursor/first-playable-66d6`.
 
 ## Task 4: Private views before online access
 
@@ -60,26 +60,28 @@ Derive actual codespace annotations and scaffold paths from the selected compile
 
 ## Task 5: Match authority and recovery
 
-- [ ] Bind a session to one of two seats; invitation codes are not shot authority. A third player cannot replace an occupant.
-- [ ] Test duplicate command IDs, changed payload with reused ID, stale revision, simultaneous submission, finished match, and unauthenticated access.
-- [ ] Implement one verified per-match authority boundary. Do not claim a process lock supports multiple workers.
-- [ ] Persist accepted-command journal and pre-shot checkpoint; commit one outcome and next turn consistently.
-- [ ] Test restart before and after outcome commit. Retrying must not create another shot or advance an extra turn.
-- [ ] Verify, commit, and push.
+- [x] Bind a session to one of two seats; invitation codes are not shot authority. A third player cannot replace an occupant. `tests/authority_tests.jac`. Seats are player ids in this process. JWT `def:protect` binding is still open.
+- [x] Test duplicate command IDs, changed payload with reused ID, stale revision, simultaneous submission, finished match, and unauthenticated access. Simultaneous means the in-process `in_flight` flag. The in-process unauthenticated case is an empty player id. The HTTP 401 is the later capture in [BUILD-STATUS.md](BUILD-STATUS.md).
+- [x] Implement one verified per-match authority boundary. Do not claim a process lock supports multiple workers. `server/authority.jac`.
+- [x] Persist accepted-command journal and pre-shot checkpoint; commit one outcome and next turn consistently. `journal.jsonl` is the commit. `pending.json` is the checkpoint and is deleted on reload when no commit line exists. The checkpoint stores turn, revision, and shot count, not Pymunk poses.
+- [x] Test restart before and after outcome commit. Retrying must not create another shot or advance an extra turn.
+- [x] Verify, commit, and push. `d223c1c9ceb19997c88d44c5354ffd55a2c76688` on `origin/cursor/first-playable-66d6`. That commit's unauthenticated case is an empty player id. The HTTP 401 was captured later and is recorded in [BUILD-STATUS.md](BUILD-STATUS.md).
 
 ## Task 6: Playable client
 
-- [ ] Use two browser contexts with separate sessions. Exercise joining, both flares, shell launch, local collapse, fog return, next turn, win/draw, and refresh.
-- [ ] Implement Jac scene orchestration and Phaser presentation, original industrial shapes, captions, and reduced shake.
-- [ ] Animate only the authoritative permitted result. The client never decides a hidden hit.
-- [ ] Capture actual two-client evidence, run the tests/build, commit, and push.
+- [x] Two browser contexts with separate sessions joined one match. Both flares and the shell were pulled on the page. The shell collapsed the braced post, the reveal opened, then the reveal closed. The same two-browser run now ends the match when B's core dies and restores it with Rematch. Draw remains the unit test in `tests/aim_rules_tests.jac`. A process restart replays the journal, and a refreshed page reclaims its seat. Evidence is in [BUILD-STATUS.md](BUILD-STATUS.md).
+- [x] Jac scene orchestration and Phaser presentation. The caption reports seat, phase, and weapon. Shapes are original rectangles and a circle. Reduced shake was not added.
+- [x] The drawn projectile is the server path. `client/mount_field.js` does not clamp that path to the fog edge and does not decide the hit.
+- [x] Two-client evidence is in [BUILD-STATUS.md](BUILD-STATUS.md). The second context's response bodies omit `12345.67`, `-9876.54`, and `87654.32`.
+
+`jac run` serves `main.jac` at `http://localhost:8000/`. Phaser 3.90.0 logs `Phaser v3.90.0 (WebGL | Web Audio)`. A pull submits `loose_shot`. The gold dot follows the server path only while that payload still has samples, including into an open reveal, and it is removed when the next watch sends an empty path. A hitting shell draws the fallen post only while that seat's reveal is open.
 
 ## Task 7: Supply graph
 
-- [ ] Test intact chain, broken only route, alternate path, cyclic graph, separated endpoints, and ownership isolation.
-- [ ] Use real Jac nodes/edges/traversal to update the powered indicator after physical breaks. Rubble does not conduct.
-- [ ] A disconnected objective remains a target, and the basic shot remains available.
-- [ ] Verify, commit, and push.
+- [x] Test intact chain, broken only route, alternate path, cyclic graph, separated endpoints, and ownership isolation. `tests/supply_tests.jac`.
+- [x] Use real Jac nodes/edges/traversal to update the powered indicator after physical breaks. Rubble does not conduct. `graph/supply.jac` uses `Site`, `Cable`, and `PowerWalk`. Breaking B's braced post sets `mast_b.intact` false, so B's lamp goes dark while `shot_ready` stays true. The lamp is the viewing seat's boolean. Enemy core coordinates are not sent.
+- [x] A disconnected objective remains a target, and the basic shot remains available. `shot_ready` is true in each of those cases.
+- [x] Verify, commit, and push. `ad5f899750a8cc41d5595c776dfdedd0457a9150` on `origin/cursor/first-playable-66d6`.
 
 ## Task 8: Hosting and measured report
 

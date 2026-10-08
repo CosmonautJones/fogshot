@@ -1,0 +1,31 @@
+name: verify
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pinned Jac
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/jaseci-labs/jaseci/main/scripts/install.sh | bash -s -- --version 0.37.23
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install project dependencies
+        run: jac install
+
+      - name: Behavior suite, client playback, and two browsers
+        run: bash scripts/verify.sh

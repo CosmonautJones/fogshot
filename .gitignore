@@ -29,10 +29,13 @@ coverage/
 *.sqlite-*
 *.db
 runtime-data/
+.fogshot-match/
+.fogshot-rooms/
 private-replays/
 *.log
 test-results/
 playwright-report/
+.playwright-mcp/
 # Workspaces and OS files
 .worktrees/
 .superpowers/
