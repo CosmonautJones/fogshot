@@ -37,7 +37,7 @@ The final local dev run reached an entitled seat at 976.3 ms, with no horizontal
 
 Final production client JS is 2,175,109 bytes (527,523 gzip), CSS 4,675 bytes (1,636 gzip), SVG 2,515 bytes (1,049 gzip). Gzip figures are local compression measurements, not a claim that a hosted server serves gzip. Existing framework/renderer weight dominates. No external asset request is required.
 
-Evidence gallery will be attached in the following evidence checkpoint. Room codes and the dynamic caption are redacted from public captures; no JWTs, seat tokens, match databases or raw network traces are included. The before image is the **original renderer with a synthetic entitled observation fixture**; after images are the actual Jac game, including aiming/reveal states.
+[Evidence gallery](evidence/2026-10-14-visual-polish/README.md) records the pushed implementation checkpoint `0306e1d8e124ba9360ca8f6432069c6a40a57edc`. Room codes and the dynamic caption are redacted from public captures; no JWTs, seat tokens, match databases or raw network traces are included. The before image is the **original renderer with a synthetic entitled observation fixture**; after images are the actual Jac game, including aiming/reveal states.
 
 ## Runtime limits and reproducibility
 
