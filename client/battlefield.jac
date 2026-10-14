@@ -4,6 +4,7 @@ import from "react" { useEffect }
 import from "@jac/runtime" { SignupResult, jacLogin, jacSignup }
 import from "./mount_field.js" { mountField, publishRoom, roomFromLocation }
 import from "./playback.js" { sampleAt, shellWord }
+import from "./presentation.js" { hudState }
 import from server.live { create_room, join_seat, loose_shot, play_again, release_seat, watch_match }
 
 glob _set_caption: any = None;
@@ -87,7 +88,7 @@ def _note(raw: str) -> None {
     _remember(parsed);
     supply = "on" if parsed.own_powered != False else "dark";
     shell = shellWord(parsed.shot_ready != False, parsed.your_turn == True);
-    text = "Room " + _room + ". Seat " + str(parsed.seat) + " / " + str(parsed.phase) + " / " + str(parsed.weapon) + " / supply " + supply + " / shell " + shell + ". Pull back from the launcher. The shot is the server result.";
+    text = "Room " + _room + ". Seat " + str(parsed.seat) + ". " + ("Your turn. " if parsed.your_turn == True else "Opponent aiming. ") + ("Scout the hidden outpost with a flare." if str(parsed.phase) == "recon" else "Shell " + shell + ". Supply " + supply + ".");
     if parsed.result {
         text = text + " Result " + str(parsed.result) + ".";
     }
@@ -226,7 +227,7 @@ def:pub Battlefield -> JsxElement {
 
     useEffect(lambda {
         parent = document.getElementById("fogshot-field");
-        if sampleAt is None {
+        if sampleAt is None or hudState is None {
             return lambda { };
         }
         handle = mountField(parent) as any;
@@ -256,28 +257,39 @@ def:pub Battlefield -> JsxElement {
         };
     }, []);
 
-    <section style={{
-        "fontFamily": "system-ui, sans-serif",
-        "background": "#10141a",
-        "color": "#e7eef2",
-        "minHeight": "100vh",
-        "padding": "1.5rem"
-    }}>
-        <h1 style={{"fontSize": "1.4rem", "margin": "0 0 0.4rem"}}>Fogshot</h1>
-        <p>{caption}</p>
-        <button
-            id="fogshot-rematch"
-            onClick={lambda (event: any) { _again(); }}
-            style={{
-                "margin": "0 0 0.8rem",
-                "background": "#243044",
-                "color": "#e7eef2",
-                "border": "1px solid #8fd0c6",
-                "padding": "0.4rem 0.8rem"
-            }}
-        >
-            Rematch
-        </button>
-        <div id="fogshot-field" style={{"width": "800px", "height": "400px"}}></div>
-    </section>
+    <main className="fogshot-shell">
+        <header className="masthead">
+            <div>
+                <div className="eyebrow">A DUEL BEYOND THE RIDGELINE</div>
+                <h1 className="brand">FOGSHOT<span style={{"color": "#85b9aa"}}>.</span></h1>
+                <div className="tagline">Aim from memory. Bring the unseen down.</div>
+            </div>
+            <div className="utilities">
+                <div className="room-card"><span>PRIVATE ROOM</span><strong id="fogshot-room">------</strong></div>
+                <button id="fogshot-rematch" className="utility-button" onClick={lambda (event: any) { _again(); }}>Rematch</button>
+            </div>
+        </header>
+        <div className="briefing"><h2>Night shift at the outpost</h2><span>01 / RIDGELINE</span></div>
+        <div className="arena-frame">
+            <div id="fogshot-field" role="group" aria-label="Fogshot battlefield. Drag backward from your launcher and release to fire. Use the keyboard controls described below."></div>
+            <div className="field-caption">THE RIDGELINE / AFTER DARK</div>
+            <div className="field-hint" id="fogshot-observation">ENEMY STRUCTURES HIDDEN</div>
+        </div>
+        <div className="status-bar" aria-label="Match status">
+            <div className="stat"><span className="stat-label">INITIATIVE</span><strong id="fogshot-turn">Connecting…</strong></div>
+            <div className="stat"><span className="stat-label">IN THE SLING</span><strong id="fogshot-weapon">Scout flare</strong></div>
+            <div className="stat"><span className="stat-label">YOUR OUTPOST</span><strong id="fogshot-supply">Connecting…</strong></div>
+            <div className="stat"><span className="stat-label">OBJECTIVES</span><strong className="core-count" id="fogshot-cores">—</strong></div>
+        </div>
+        <div className="instructions">
+            <div className="instruction"><b><span className="step-number">01</span>Pull, then let go.</b>Drag backward from the launcher to set direction and strength. Release to launch.</div>
+            <div className="instruction"><b><span className="step-number">02</span>Look while you can.</b>Your opening flare reveals a small patch. Remember the shapes before the fog returns.</div>
+            <div className="instruction"><b><span className="step-number">03</span>Make it come apart.</b>Shells break supports and cores. Destroy the enemy core to win the duel.</div>
+        </div>
+        <p className="match-caption" id="fogshot-caption" role="status" aria-live="polite">{caption}</p>
+        <footer className="field-footer">
+            <details><summary>Controls &amp; inviting a friend</summary><p>Send this page URL to a friend to join the private room. Focus the battlefield with Tab: arrow keys adjust the pull, Enter launches, Escape cancels. With touch or mouse, release outside the field to cancel. Motion follows your device preference. <span id="fogshot-pull">Pull to aim.</span></p></details>
+            <span className="edition">FIELD STUDY / FIRST PLAYABLE</span>
+        </footer>
+    </main>
 }

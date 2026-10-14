@@ -1,5 +1,12 @@
 # Build status
 
+## Moonlit outpost presentation — 2026-10-14
+
+A cohesive local visual slice is implemented on `codex/fogshot-moonlit-polish-20261014`, based on `81bb802`. Original moonlit landscape/material art, responsive status HUD, pull feedback, bounded observation effects and keyboard controls. Gameplay authority and private projection modules are unchanged. Independent design/code review findings were repaired.
+
+Pinned Jac check/build passed; 50 Jac tests and 12 Node tests passed. Real shot race, two-seat wins/rematch/privacy and the new mobile/presentation checks passed. See [the detailed report](VISUAL-POLISH-2026-10-14.md) for exact commands, measurements, provenance, evidence and remaining limitations. Source/dev play is verified; an earlier sealed `.jab` start failed with a missing executable main artifact, so packaged launch is not qualified. No merge or deployment.
+
+
 Recorded: 2026-10-04
 
 ## Repository

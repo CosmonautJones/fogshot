@@ -46,9 +46,9 @@ async function pull(page, x, y) {
         throw new Error("the field canvas is missing");
     }
     const seat = await page.evaluate(() => document.getElementById("fogshot-field").dataset.seat);
-    await page.mouse.move(box.x + (seat === "B" ? 680 : 120), box.y + 300);
+    await page.mouse.move(box.x + (seat === "B" ? 680 : 120) * box.width / 800, box.y + 300 * box.height / 400);
     await page.mouse.down();
-    await page.mouse.move(box.x + x, box.y + y, { steps: 6 });
+    await page.mouse.move(box.x + (seat === "B" ? 800 - x : x) * box.width / 800, box.y + y * box.height / 400, { steps: 6 });
     await page.mouse.up();
 }
 
@@ -155,10 +155,10 @@ try {
     if (closedA.rev !== "closed" || closedA.br !== "false" || closedA.sx !== "" || laterA.sx !== "") {
         fail(`seat A kept a shot or a break after the reveal closed: ${JSON.stringify({ closedA, laterA })}`);
     }
-    if (!closedA.cap.includes("shell waiting")) {
+    if (!closedA.cap.toLowerCase().includes("shell waiting")) {
         fail(`seat A caption did not say waiting: ${closedA.cap}`);
     }
-    if (closedB.pow !== "false" || closedB.br !== "true" || !closedB.cap.includes("supply dark")) {
+    if (closedB.pow !== "false" || closedB.br !== "true" || !closedB.cap.toLowerCase().includes("supply dark")) {
         fail(`seat B did not show the broken supply: ${JSON.stringify(closedB)}`);
     }
     if (closedB.sx !== "") {
