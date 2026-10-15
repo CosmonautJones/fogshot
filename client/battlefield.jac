@@ -324,15 +324,16 @@ def:pub Battlefield -> JsxElement {
         </header>
         <div className="briefing"><h2>Night shift at the outpost</h2><span>01 / RIDGELINE</span></div>
         <div className="arena-frame">
-            <div id="fogshot-field" role="group" aria-label="Fogshot battlefield. Drag backward from your launcher and release to fire. Use the keyboard controls described below."></div>
+            <div id="fogshot-field" role="group" aria-describedby="fogshot-pull" aria-label="Fogshot battlefield. Drag backward from your launcher and release to fire. Use the keyboard controls described below."></div>
             <div className="field-caption">THE RIDGELINE / AFTER DARK</div>
             <div className="field-hint" id="fogshot-observation">ENEMY STRUCTURES HIDDEN</div>
         </div>
+        <p className="control-strip" id="fogshot-pull" role="status" aria-live="polite">Drag back and release. Keyboard: Tab to field, arrows aim, Enter fires, Escape cancels.</p>
         <div className="status-bar" aria-label="Match status">
-            <div className="stat"><span className="stat-label">INITIATIVE</span><strong id="fogshot-turn">Connectingâ€¦</strong></div>
+            <div className="stat"><span className="stat-label">INITIATIVE</span><strong id="fogshot-turn">Connecting...</strong></div>
             <div className="stat"><span className="stat-label">IN THE SLING</span><strong id="fogshot-weapon">Scout flare</strong></div>
-            <div className="stat"><span className="stat-label">YOUR OUTPOST</span><strong id="fogshot-supply">Connectingâ€¦</strong></div>
-            <div className="stat"><span className="stat-label">OBJECTIVES</span><strong className="core-count" id="fogshot-cores">â€”</strong></div>
+            <div className="stat"><span className="stat-label">YOUR OUTPOST</span><strong id="fogshot-supply">Connecting...</strong></div>
+            <div className="stat"><span className="stat-label">OBJECTIVES</span><strong className="core-count" id="fogshot-cores">-</strong></div>
         </div>
         <div className="instructions">
             <div className="instruction"><b><span className="step-number">01</span>Pull, then let go.</b>Drag backward from the launcher to set direction and strength. Release to launch.</div>
@@ -341,7 +342,7 @@ def:pub Battlefield -> JsxElement {
         </div>
         <p className="match-caption" id="fogshot-caption" role="status" aria-live="polite">{caption}</p>
         <footer className="field-footer">
-            <details><summary>{"Controls & practice" if in_practice else "Controls & inviting a friend"}</summary><p>{"One practice opponent. Same fog and launch rules. The bot waits for your reveal, then thinks and fires. " if in_practice else "Send this page URL to a friend to join the private room. "} Focus the battlefield with Tab: arrow keys adjust the pull, Enter launches, Escape cancels. With touch or mouse, release outside the field to cancel. Motion follows your device preference. <span id="fogshot-pull">Pull to aim.</span></p></details>
+            <details><summary>{"Controls & practice" if in_practice else "Controls & inviting a friend"}</summary><p>{"One practice opponent. Same fog and launch rules. The bot waits for your reveal, then thinks and fires. " if in_practice else "Send this page URL to a friend to join the private room. "} With touch or mouse, release outside the field to cancel. Motion follows your device preference.</p></details>
             <span className="edition">FIELD STUDY / FIRST PLAYABLE</span>
         </footer>
     </main>

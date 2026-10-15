@@ -3,3 +3,5 @@
 #fogshot-cores{white-space:pre-line;display:block;line-height:1.45}
 
 .utility-button:disabled{opacity:.45;cursor:default}
+
+.control-strip{margin:10px 0 0;font-size:12px;line-height:1.6;color:#b6d6c6}
