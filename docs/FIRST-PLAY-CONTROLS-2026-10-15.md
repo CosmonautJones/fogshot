@@ -20,6 +20,8 @@ The existing unique pull hint now sits directly below the field, with Tab/arrows
 
 One final capture attempt timed out at Playwright's screenshot step after an HMR update. That failure is retained outside the repository. The exact final source passed after the server settled. Startup tests temporarily hold the genuine join request, inspect the initial UI, then forward it unchanged. Their elapsed startup measurements include that deliberate hold and screenshots, so they are explicitly labeled `startupHeldForChecks` and are not loading benchmarks.
 
+The first stacked-PR CI run exposed a test-only route teardown race: ordinary unroute could handle the held join before its callback continued (Route is already handled). The push run on the same head passed, demonstrating the timing dependence. The repair uses installed Playwright 1.55.1's unrouteAll with behavior wait, after releasing the gate, to wait for active handlers without suppressing errors. Independent review confirmed those semantics and the focused real-browser suite passed after repair. Application code and captures are unchanged by this test-only follow-up.
+
 Local checks remained focused while TravOS owned the heavy Windows slot. No full local Jac suite or sealed rebuild was repeated. The branch's normal clean Linux CI performs the full required source/sealed workflow; its PR checks are the final-head source of truth.
 
 ## Captures
@@ -38,4 +40,4 @@ After, ready to play:
 
 ## Handoff
 
-The separate source preview uses http://127.0.0.1:8184/ (API 8185). Existing previews at 8180 and 8182 and frozen PR heads are preserved. This is a presentation-only review candidate. Screen-reader hardware, real mobile devices and long soak behavior remain unqualified; no new deployment or production-readiness claim is made. No paid calls, credentials, purchases or new dependencies.
+The separate source preview uses http://127.0.0.1:8184/ (API 8185). Existing previews at 8180 and 8182 and frozen PR heads are preserved. This is a presentation-only review candidate. Screen-reader hardware, real mobile devices and long soak behavior remain unqualified; no new deployment or production-readiness claim is made. No paid calls, purchases or new dependencies; no credentials were published.

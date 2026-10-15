@@ -33,7 +33,7 @@ try {
     await screenshot("first-play-startup.png");
     assert.deepEqual(faults,[],"first-play control help and loading copy");
     unblockJoin();
-    await page.unroute("**/function/join_seat");
+    await page.unrouteAll({behavior:"wait"});
     await page.waitForFunction(()=>document.getElementById("fogshot-field")?.dataset.yourTurn === "true",null,{timeout:30000});
     await page.waitForSelector("canvas");
     const loaded = await page.evaluate(()=>({
