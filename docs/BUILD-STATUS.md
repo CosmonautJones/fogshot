@@ -1,9 +1,12 @@
 # Build status
 
-## Solo practice source checkpoint - 2026-10-15
+## Solo practice playable and sealed - 2026-10-15
 
-A separate branch based on reviewed head 70d289b adds an observation-only, deterministic practice bot and owner-only durable turn scheduling. All 65 Jac behavior tests pass, including both practice outcomes, duplicate/concurrent polling, restart/rematch recovery and the independently reviewed atomic-creation regressions. Whole-program check, 16 client tests and all four actual source HTTP/browser suites pass, including Practice lifecycle, desktop/mobile controls and the original multiplayer outcomes. Independent code/design findings have been repaired. Sealed-game verification remains in progress. See [practice evidence](PRACTICE-BOT-2026-10-15.md). PR8 and its existing local playtest are preserved.
+Draft [PR #9](https://github.com/CosmonautJones/fogshot/pull/9), stacked on frozen PR8, adds a fair deterministic practice bot, owner-only durable turns, Practice/Multiplayer controls and a presentation-only reachable-pull gauge correction. The code checkpoint is `039a1dfc95bf057e610e72c85d2c60abfb9f4c03`.
 
+All 65 Jac tests, whole-program check, 16 client tests and all four actual source HTTP/browser suites pass. The sealed build, executable-entry guard and all four actual packaged-game suites also pass, including both winners, rematches, privacy, concurrent due polling, reload, delayed replies, desktop/mobile controls and reduced motion. Independent code/design findings were repaired and final review found no remaining blockers. See [practice report, captures, hashes and limits](PRACTICE-BOT-2026-10-15.md). Final-head clean Linux CI is tracked by PR9.
+
+The separate loopback sealed playtest is http://127.0.0.1:8182/?practice=1. PR8's reviewed head `70d289b` and port8180 preview are preserved; main is unchanged. Single-process hosting only was tested; no merge or deployment.
 
 ## Sealed launch follow-through - 2026-10-15
 
