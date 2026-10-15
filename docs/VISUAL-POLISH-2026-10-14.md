@@ -19,9 +19,9 @@ The SVG is 2,515 bytes, SHA-256 `afc3d39fb3bc7a5e720082750e890d53ca35147d4ce8fef
 ## Verification
 
 - `jac check main.jac client/battlefield.jac`: passed; existing interop/explicit-any/JSX-name warnings remain.
-- `jac build`: final source passed, 11/11 server modules compiled, six client dist files, sealed output 3,103,103 bytes. The supported root `assets/` path and direct Jac import of `presentation.js` are required; the first build exposed and then fixed the missing transitive CSS/SVG staging.
+- `jac build`: final source passed, 11/11 server modules compiled, six client dist files, sealed output 3,743,652 bytes (including the retained evidence files). The supported root `assets/` path and direct Jac import of `presentation.js` are required; the first build exposed and then fixed the missing transitive CSS/SVG staging.
 - `JAC_TEST_STRICT=1 jac test tests/*_tests.jac -v`: **50 passed in 40.64s**, including privacy, duplicate/conflicting commands, wrong actor/turn/revision, transaction recovery, thin supports, bounded settling, supply, both winners and restart/rematch behavior. Authoritative Jac files were not changed afterward.
-- `node --test tests/playback_client.test.mjs tests/room_client.test.mjs tests/presentation_client.test.mjs`: **12 passed**. The new presentation file first failed with the intended missing-module error before implementation.
+- `node --test tests/playback_client.test.mjs tests/room_client.test.mjs tests/presentation_client.test.mjs`: **14 passed**. The new presentation file first failed with the intended missing-module error before implementation.
 - `node tests/e2e/shot_race.mjs`: **shot race ok**. One simultaneous command was accepted, the other returned busy, and a separate room stayed untouched.
 - `node tests/e2e/two_seats.mjs`: **two seats ok**. Two real isolated browser sessions, B's physical pull mapping, filtered responses, reveal closure, supply loss without losing shell access, A and B wins, stale-epoch rejection and shared rematch.
 - `node tests/e2e/presentation.mjs`: **presentation interactions ok**, zero page errors. Real Jac application; no response stubs. Checks 1280px/390px fit, CDP touch cancellation/additional touches, outside release, keyboard-to-pointer switching, exact scaled pull coordinates, keyboard launch, reveal expiry with watches blocked, and reduced-motion reload.
@@ -35,7 +35,7 @@ Independent code review requested and verified fixes for B input, touch cancella
 
 The final local dev run reached an entitled seat at 976.3 ms, with no horizontal overflow. The 120-frame effect sample measured 16.7 ms median / 16.8 ms p95; reduced-motion idle measured 16.7 / 16.8 ms. These are local headless desktop Chrome measurements while other work was active, not physical mobile or hosted performance guarantees. The full metric record lists dev resource transfers separately from production bundle sizes.
 
-Final production client JS is 2,175,109 bytes (527,523 gzip), CSS 4,675 bytes (1,636 gzip), SVG 2,515 bytes (1,049 gzip). Gzip figures are local compression measurements, not a claim that a hosted server serves gzip. Existing framework/renderer weight dominates. No external asset request is required.
+At the visual evidence checkpoint, production client JS was 2,175,109 bytes (527,523 gzip), CSS 4,675 bytes (1,636 gzip), SVG 2,515 bytes (1,049 gzip). Gzip figures are local compression measurements, not a claim that a hosted server serves gzip. Existing framework/renderer weight dominates. No external asset request is required.
 
 [Evidence gallery](evidence/2026-10-14-visual-polish/README.md) records the pushed implementation checkpoint `0306e1d8e124ba9360ca8f6432069c6a40a57edc`. Room codes and the dynamic caption are redacted from public captures; no JWTs, seat tokens, match databases or raw network traces are included. The before image is the **original renderer with a synthetic entitled observation fixture**; after images are the actual Jac game, including aiming/reveal states.
 
@@ -57,3 +57,13 @@ Browser checks were run with Windows Node, the X:-local Playwright 1.55.1 instal
 An earlier `jac run dist/fogshot.jab` attempt failed with `Sealed application is missing executable artifact: .../main.jac`. The sealed launch path has **not** been qualified. The tested deliverable is the source/dev workflow. An initial source startup also rejected a source change during preparation; startup was repeated with edits paused. No hosted, sealed-package, human-playtest, low-end physical-device or production-ready claim is made.
 
 Rollback: revert the feature commits or leave the branch unmerged. Main and existing WIP were not edited. Merge and deployment still require specific Fogshot approval.
+
+## CI boundary-race follow-up
+
+The first remote Linux verification (`38656644667`, implementation checkpoint `0306e1d`) passed all Jac/Node tests and the HTTP race, but caught a transient expired observation: `reveal` was closed while A's `broken` dataset was briefly restored by a delayed open-poll response. The next poll cleared it. The subsequent unmodified evidence head `d8f1ca3` passed the full Linux verification (`38656913178`), confirming the timing-dependent nature; that pass does not excuse the race.
+
+The follow-up adds `observationAt` before playback and HUD bookkeeping, using one captured wall timestamp for all response-expiry decisions. It strips expired bodies, paths, collapse state and A's enemy-post break/angle together; B retains the same post's own-state fields, as defined in `server.live._encode`. Local closure likewise preserves entitled own state. A new deterministic regression failed before the helper existed and then passed; the focused Node total is now 14. No server projection, physics or rules were changed. Screenshots remain an accurate record of the earlier visual checkpoint; this repair changes expiry bookkeeping rather than art.
+
+The independent follow-up review caught and repaired a second boundary case where two separate clock reads could straddle expiry. A time-advance regression covers the explicit cutoff. Preparation is now run with all repository edits paused; the runtime fingerprints documentation as well as source, so an earlier concurrent report update caused a safe preparation abort.
+
+The frozen expiry-repair revision also passed `jac build` (11/11 modules; 3,743,652-byte sealed output). The sealed launch path remains unqualified; no packaging-start success is inferred from build success.

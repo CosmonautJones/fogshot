@@ -42,3 +42,18 @@ export function hudState(data) {
 export function protocolPull(seat, pointer) {
     return { x: seat === "B" ? 800 - pointer.x : pointer.x, y: pointer.y };
 }
+
+// Normalize delayed observations before either playback or HUD bookkeeping.
+export function observationAt(data, now) {
+    if (!data.view || !data.view.reveal || Number(data.reveal_until) > now) return data;
+    // These legacy fields describe B's post (server.live._encode). Its owner
+    // may retain them; another viewer may not retain an expired observation.
+    const ownPost = data.seat === "B";
+    return {
+        ...data, view: { ...data.view, reveal: null },
+        reveal_until: 0, reveal_x: 0, reveal_y: 0, reveal_radius: 0,
+        path: [], collapse: [], collapse_id: "",
+        broken: ownPost ? data.broken : false,
+        angle: ownPost ? data.angle : 0,
+    };
+}

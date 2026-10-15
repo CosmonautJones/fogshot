@@ -4,7 +4,7 @@
 // not integrate a shot or decide a hit.
 import { AUTO, Game, Scale } from "phaser";
 import "../assets/field.css";
-import { bodySize, pullFeedback, hudState, protocolPull } from "./presentation.js";
+import { bodySize, pullFeedback, hudState, protocolPull, observationAt } from "./presentation.js";
 import { isStale, releaseAllowed, sampleAt, stepWatch } from "./playback.js";
 
 const ARENA_W = 40;
@@ -123,7 +123,8 @@ function expireObservation(scene) {
     scene.collapseAngle = null;
     scene.collapseId = "";
     const parent = scene.fieldParent;
-    Object.assign(parent.dataset, { reveal: "closed", shotScreenX: "", shotTime: "", broken: "false", postAngle: "0" });
+    Object.assign(parent.dataset, { reveal: "closed", shotScreenX: "", shotTime: "" });
+    if (scene.seat !== "B") Object.assign(parent.dataset, { broken: "false", postAngle: "0" });
     const observation = document.getElementById("fogshot-observation");
     if (observation) observation.textContent = "ENEMY STRUCTURES HIDDEN";
 }
@@ -498,6 +499,8 @@ export function mountField(parent) {
             if (isStale(sceneRef, data)) {
                 return;
             }
+            const observedAt = Date.now();
+            data = observationAt(data, observedAt);
             const nextEpoch = data.epoch === undefined ? sceneRef.epoch : data.epoch;
             const epochChanged = nextEpoch !== sceneRef.epoch;
             if (epochChanged) {
@@ -517,7 +520,7 @@ export function mountField(parent) {
             sceneRef.yourTurn = Boolean(data.your_turn);
             sceneRef.weapon = data.weapon || sceneRef.weapon;
             if (sceneRef.revealTimer) { clearTimeout(sceneRef.revealTimer); sceneRef.revealTimer = null; }
-            if (data.view && data.view.reveal && data.reveal_radius > 0 && data.reveal_until > Date.now()) {
+            if (data.view && data.view.reveal && data.reveal_radius > 0 && data.reveal_until > observedAt) {
                 const key = `${data.epoch}:${data.reveal_until}`;
                 if (!sceneRef.reveal || sceneRef.reveal.key !== key) {
                     sceneRef.reveal = { key, x: data.reveal_x, y: data.reveal_y, radius: data.reveal_radius, until: data.reveal_until, started: sceneRef.time.now };
@@ -530,7 +533,6 @@ export function mountField(parent) {
             } else {
                 sceneRef.reveal = null;
                 if (sceneRef.view) sceneRef.view = { ...sceneRef.view, reveal: null };
-                if (data.view && data.view.reveal) data = { ...data, view: { ...data.view, reveal: null }, path: [], collapse: [] };
             }
             if (data.seat) {
                 sceneRef.seat = data.seat;
