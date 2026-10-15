@@ -1,5 +1,10 @@
 # Build status
 
+## Solo practice backend checkpoint - 2026-10-15
+
+A separate branch based on reviewed head 70d289b adds an observation-only, deterministic practice bot and owner-only durable turn scheduling. All 63 Jac behavior tests pass, including both practice outcomes, duplicate/concurrent polling and restart/rematch recovery. UI and actual sealed-game verification are in progress. See [practice evidence](PRACTICE-BOT-2026-10-15.md). PR8 and its existing local playtest are preserved.
+
+
 ## Sealed launch follow-through - 2026-10-15
 
 The missing executable main artifact also reproduced on untouched base commit 81bb802. An empty server boot block now retains the entry under pinned Jac 0.37.23. The corrected sealed artifact starts, serves HTTP 200 and passes actual authenticated shot-race and both-seat wins/rematch/privacy smoke. A focused package-entry guard and actual sealed-game CI step prevent build success from being mistaken for launch success. Independent code review cleared the correction and runner cleanup. See [sealed launch evidence](SEALED-LAUNCH-2026-10-15.md), including the preserved initial browser stall and focused test hardening. Hosting remains unqualified; no merge or deployment.

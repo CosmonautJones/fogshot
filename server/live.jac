@@ -4,6 +4,7 @@ import json;
 import math;
 import from pathlib { Path }
 import from game.aim { launcher_for, release_pull }
+import from game.practice_bot { choose, learn, new_memory }
 import from game.rules { MatchRules, accept_shot, copy_rules, resolve_cores }
 import from graph.supply { Cable, Site, assess }
 import from physics.pymunk_driver { BodyState, PhysicsWorld, SimOutcome }
@@ -12,6 +13,22 @@ import from server.clock { server_now }
 import from server.views { SecretBody, project_view }
 
 ::py::
+def _room_root():
+    import os
+    return os.environ.get("FOGSHOT_ROOM_ROOT", "/tmp/fogshot-rooms")
+
+import threading
+_room_guard = threading.RLock()
+_room_locks = {}
+
+def _room_lock(key):
+    with _room_guard:
+        return _room_locks.setdefault(str(key), threading.RLock())
+
+def _practice_code(owner, attempt):
+    import hashlib
+    return hashlib.sha256(("practice:" + str(owner) + ":" + str(attempt)).encode()).hexdigest()[:6]
+
 def _same_shot(payload, seat, weapon, angle, power, epoch):
     parts = str(payload).split("|")
     if len(parts) < 6:
@@ -97,13 +114,14 @@ obj LiveMatch {
     has core_a_alive: bool = True;
     has core_b_alive: bool = True;
     has refused: bool = False;
+    has practice: any = None;
     has shot_path: list[list[float]] = [];
     has shot_collapse: list[list[float]] = [];
     has shot_collapse_id: str = "";
 }
 
 glob _shared: LiveMatch | None = None;
-glob ROOM_ROOT: str = "/tmp/fogshot-rooms";
+glob ROOM_ROOT: str = _room_root() as str;
 
 def _chain(owner: str, source_name: str, mast_name: str, core_name: str) -> tuple[Site, Site, Site] {
     source = Site(name=source_name, owner=owner, kind="source", intact=True);
@@ -240,6 +258,7 @@ def _save_canonical(live: LiveMatch, fail: bool) -> None {
     }
     text = json.dumps({
         "version": 1,
+        "practice": live.practice,
         "solver": "pymunk-7.3.0",
         "epoch": live.table.epoch,
         "shots": live.table.shots,
@@ -276,6 +295,11 @@ def _load_canonical(live: LiveMatch) -> bool {
     if int(data["version"]) != 1 or str(data["solver"]) != "pymunk-7.3.0" {
         live.refused = True;
         return True;
+    }
+    live.practice = data.get("practice");
+    if live.practice is not None {
+        live.table.seat_a = str(live.practice["owner"]);
+        live.table.seat_b = str(live.practice["bot"]);
     }
     live.table.epoch = int(data["epoch"]);
     live.table.shots = int(data["shots"]);
@@ -356,35 +380,39 @@ def shared_match() -> LiveMatch {
 }
 
 def open_room() -> str {
-    attempt = 0;
-    while attempt < 8 {
-        code = str(_fresh_code() as str);
-        if not (_code_ok(code) as bool) or Path(ROOM_ROOT + "/" + code).exists() {
-            attempt = attempt + 1;
-            continue;
+    with _room_lock("__create__") {
+        attempt = 0;
+        while attempt < 8 {
+            code = str(_fresh_code() as str);
+            if not (_code_ok(code) as bool) or Path(ROOM_ROOT + "/" + code).exists() {
+                attempt = attempt + 1;
+                continue;
+            }
+            live = boot_match(ROOM_ROOT + "/" + code, code);
+            _remember_room(code, live);
+            return code;
         }
-        live = boot_match(ROOM_ROOT + "/" + code, code);
-        _remember_room(code, live);
-        return code;
+        return "";
     }
-    return "";
 }
 
 def room_match(code: str) -> any {
-    if not (_code_ok(code) as bool) {
-        return None;
+    with _room_lock(code if (_code_ok(code) as bool) else "__invalid__") {
+        if not (_code_ok(code) as bool) {
+            return None;
+        }
+        found = _recall_room(code);
+        if found is not None {
+            return found;
+        }
+        directory = ROOM_ROOT + "/" + code;
+        if not Path(directory).exists() {
+            return None;
+        }
+        live = boot_match(directory, code);
+        _remember_room(code, live);
+        return live;
     }
-    found = _recall_room(code);
-    if found is not None {
-        return found;
-    }
-    directory = ROOM_ROOT + "/" + code;
-    if not Path(directory).exists() {
-        return None;
-    }
-    live = boot_match(directory, code);
-    _remember_room(code, live);
-    return live;
 }
 
 def _match_for(invite: str) -> any {
@@ -392,6 +420,9 @@ def _match_for(invite: str) -> any {
 }
 
 def claim_player(live: LiveMatch, player_id: str) -> ClaimResult {
+    if live.practice is not None and str(live.practice["owner"]) != player_id {
+        return ClaimResult(ok=False, code="unauthenticated");
+    }
     return claim(live.table, player_id, live.table.invite);
 }
 
@@ -706,6 +737,11 @@ def _encode(
         "room": live.table.invite,
         "view": json.loads(json.dumps(view.__dict__))
     };
+    if live.practice is not None {
+        payload["mode"] = "practice";
+        payload["bot_thinking"] = live.table.rules.active == "B" and live.table.rules.phase != "finished";
+        payload["bot_due_at"] = int(live.practice["due"]);
+    }
     return json.dumps(payload);
 }
 
@@ -821,6 +857,7 @@ def take_shot(
     if not checked.ok {
         return _encode(live, player_id, server_now(), False, checked.code, weapon, False, 0.0);
     }
+    previous_practice = json.loads(json.dumps(live.practice));
     previous = copy_rules(live.table.rules);
     saved = live.world.capture();
     reveal_seat = live.reveal_seat;
@@ -858,6 +895,7 @@ def take_shot(
         live.table.commits.append(command_id);
         live.table.payloads.append(payload);
         added = True;
+        _practice_after_shot(live, seat);
         _save_canonical(live, live.table.fail_storage);
         live.table.fail_storage = False;
         committed = True;
@@ -865,6 +903,7 @@ def take_shot(
         committed = False;
     }
     if not committed {
+        live.practice = previous_practice;
         live.world.restore(saved);
         live.table.rules = previous;
         live.table.shots = shots_before;
@@ -914,14 +953,14 @@ def take_shot(
     return _encode(live, player_id, server_now(), True, "", weapon, broken, angle);
 }
 
-def _clear_journal(directory: str) -> None {
+def _clear_journal(directory: str, preserve_snapshot: bool = False) -> None {
     Path(directory + "/journal.jsonl").write_text("");
     pending = Path(directory + "/pending.json");
     if pending.exists() {
         pending.unlink();
     }
     canonical = Path(directory + "/canonical.json");
-    if canonical.exists() {
+    if canonical.exists() and not preserve_snapshot {
         canonical.unlink();
     }
 }
@@ -958,9 +997,133 @@ def rematch_room(live: LiveMatch, player_id: str) -> str {
         mast_b.intact = True;
     }
     _arm(live);
-    _clear_journal(live.table.directory);
+    if live.practice is not None {
+        live.practice["memory"] = new_memory(live.table.epoch);
+        live.practice["due"] = 0;
+        live.practice["plan"] = None;
+        try {
+            _save_canonical(live, live.table.fail_storage);
+            live.table.fail_storage = False;
+        } except Exception {
+            _load_canonical(live);
+            live.table.fail_storage = False;
+            return _encode(live, player_id, 0, False, "interrupted", "", False, 0.0);
+        }
+        _clear_journal(live.table.directory, True);
+    } else {
+        _clear_journal(live.table.directory);
+    }
     save_seats(live.table);
     return watch(live, player_id, 0);
+}
+
+
+def boot_practice(directory: str, owner: str, invite: str = "aabbcc") -> LiveMatch {
+    live = boot_match(directory, invite);
+    if live.practice is None {
+        live.table.seat_a = owner;
+        live.table.seat_b = "practice-bot-" + str(_fresh_code() as str);
+        live.practice = {"owner": owner, "bot": live.table.seat_b,
+            "memory": new_memory(live.table.epoch), "due": 0, "plan": None};
+        save_seats(live.table);
+        _save_canonical(live, False);
+    }
+    return live;
+}
+
+def open_practice(owner: str) -> str {
+    with _room_lock("__create__") {
+        for attempt in range(8) {
+            code = str(_practice_code(owner, attempt) as str);
+            found = room_match(code);
+            if found is not None {
+                existing = found as LiveMatch;
+                if existing.practice is not None and str(existing.practice["owner"]) == owner {
+                    return code;
+                }
+                continue;
+            }
+            live = boot_practice(ROOM_ROOT + "/" + code, owner, code);
+            _remember_room(code, live);
+            return code;
+        }
+    }
+    return "";
+}
+
+def _visit(live: LiveMatch, player: str) -> bool {
+    if live.practice is not None {
+        if player != str(live.practice["owner"]) {
+            return False;
+        }
+        live.table.seat_a = player;
+        live.table.seat_b = str(live.practice["bot"]);
+        live.table.seen_a = server_now();
+        live.table.seen_b = server_now();
+        save_seats(live.table);
+    } else {
+        release_stale(live.table, server_now());
+        note_seen(live.table, player, server_now());
+    }
+    return True;
+}
+
+def _practice_after_shot(live: LiveMatch, seat: str) -> None {
+    if live.practice is None {
+        return;
+    }
+    if seat == "B" {
+        # This is the identical redacted observation available to a human B seat.
+        observation = watch(live, str(live.practice["bot"]), server_now());
+        live.practice["memory"] = learn(observation, str(live.practice["memory"]), server_now());
+    }
+    live.practice["plan"] = None;
+    live.practice["due"] = 0;
+    if live.table.rules.active == "B" and live.table.rules.phase != "finished" {
+        live.practice["due"] = max(server_now() + 1200, live.reveal_until + 400);
+    }
+}
+
+def practice_watch(live: LiveMatch, player: str) -> str {
+    with _room_lock(live.table.directory) {
+        if live.practice is None or player != str(live.practice["owner"]) {
+            return _closed();
+        }
+        if live.table.rules.phase == "finished" or live.table.rules.active != "B" or server_now() < int(live.practice["due"]) {
+            return watch(live, player, server_now());
+        }
+        if live.practice["plan"] is None {
+            observation = watch(live, str(live.practice["bot"]), server_now());
+            plan = json.loads(choose(observation, str(live.practice["memory"])));
+            if not bool(plan.get("ready", False)) {
+                return watch(live, player, server_now());
+            }
+            plan["epoch"] = live.table.epoch;
+            plan["turn"] = live.table.turn;
+            plan["revision"] = live.table.revision;
+            plan["command"] = "practice:B:" + str(live.table.epoch) + ":" + str(live.table.turn) + ":" + str(live.table.revision);
+            live.practice["plan"] = plan;
+            try {
+                _save_canonical(live, False);
+            } except Exception {
+                live.practice["plan"] = None;
+                return _encode(live, player, 0, False, "interrupted", "", False, 0.0);
+            }
+        }
+        plan = live.practice["plan"];
+        take_shot(live, str(live.practice["bot"]), str(plan["command"]),
+            float(plan["x"]), float(plan["y"]), 800.0, 400.0, 1.0,
+            int(plan["epoch"]), int(plan["turn"]), int(plan["revision"]), str(plan["weapon"]));
+        return watch(live, player, server_now());
+    }
+}
+
+def:protect create_practice() -> str {
+    code = open_practice(str(jid(root)));
+    if code == "" {
+        return "{\"ok\": false, \"code\": \"full\", \"room\": \"\"}";
+    }
+    return json.dumps({"ok": True, "code": "", "room": code});
 }
 
 def _closed() -> str {
@@ -981,8 +1144,14 @@ def:protect release_seat(invite: str) -> str {
         return _closed();
     }
     live = found as LiveMatch;
-    release_player(live.table, str(jid(root)));
-    return "{\"ok\": true, \"code\": \"released\", \"seat\": \"\"}";
+    with _room_lock(live.table.directory) {
+        player = str(jid(root));
+        if not _visit(live, player) { return _closed(); }
+        if live.practice is None {
+            release_player(live.table, player);
+        }
+        return "{\"ok\": true, \"code\": \"released\", \"seat\": \"\"}";
+    }
 }
 
 def:protect play_again(invite: str) -> str {
@@ -991,10 +1160,13 @@ def:protect play_again(invite: str) -> str {
         return _closed();
     }
     live = found as LiveMatch;
-    player = str(jid(root));
-    release_stale(live.table, server_now());
-    note_seen(live.table, player, server_now());
-    return rematch_room(live, player);
+    with _room_lock(live.table.directory) {
+        player = str(jid(root));
+        if not _visit(live, player) {
+            return _closed();
+        }
+        return rematch_room(live, player);
+    }
 }
 
 def:protect join_seat(invite: str) -> str {
@@ -1003,14 +1175,18 @@ def:protect join_seat(invite: str) -> str {
         return _closed();
     }
     live = found as LiveMatch;
-    player = str(jid(root));
-    release_stale(live.table, server_now());
-    claimed = claim(live.table, player, invite);
-    if not claimed.ok {
-        return _encode(live, player, 0, False, claimed.code, "", False, 0.0);
+    with _room_lock(live.table.directory) {
+        player = str(jid(root));
+        if not _visit(live, player) {
+            return _closed();
+        }
+        claimed = claim(live.table, player, invite);
+        if not claimed.ok {
+            return _encode(live, player, 0, False, claimed.code, "", False, 0.0);
+        }
+        note_seen(live.table, player, server_now());
+        return watch(live, player, 0);
     }
-    note_seen(live.table, player, server_now());
-    return watch(live, player, 0);
 }
 
 def:protect watch_match(invite: str, now_ms: int) -> str {
@@ -1019,10 +1195,16 @@ def:protect watch_match(invite: str, now_ms: int) -> str {
         return _closed();
     }
     live = found as LiveMatch;
-    player = str(jid(root));
-    release_stale(live.table, server_now());
-    note_seen(live.table, player, server_now());
-    return watch(live, player, server_now());
+    with _room_lock(live.table.directory) {
+        player = str(jid(root));
+        if not _visit(live, player) {
+            return _closed();
+        }
+        if live.practice is not None {
+            return practice_watch(live, player);
+        }
+        return watch(live, player, server_now());
+    }
 }
 
 def:protect loose_shot(
@@ -1043,21 +1225,24 @@ def:protect loose_shot(
         return _closed();
     }
     live = found as LiveMatch;
-    player = str(jid(root));
-    release_stale(live.table, server_now());
-    note_seen(live.table, player, server_now());
-    return take_shot(
-        live,
-        player,
-        command_id,
-        pointer_x,
-        pointer_y,
-        canvas_w,
-        canvas_h,
-        dpr,
-        epoch,
-        expected_turn,
-        expected_revision,
-        weapon
-    );
+    with _room_lock(live.table.directory) {
+        player = str(jid(root));
+        if not _visit(live, player) {
+            return _closed();
+        }
+        return take_shot(
+            live,
+            player,
+            command_id,
+            pointer_x,
+            pointer_y,
+            canvas_w,
+            canvas_h,
+            dpr,
+            epoch,
+            expected_turn,
+            expected_revision,
+            weapon
+        );
+    }
 }
