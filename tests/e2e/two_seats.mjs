@@ -17,7 +17,7 @@ async function read(page) {
     return page.evaluate(() => {
         const field = document.getElementById("fogshot-field");
         return {
-            cap: document.querySelector("p")?.textContent || "",
+            cap: document.getElementById("fogshot-caption")?.textContent || "",
             seat: field?.dataset.seat || "",
             turn: field?.dataset.yourTurn || "",
             rev: field?.dataset.reveal || "",

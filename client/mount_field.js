@@ -11,6 +11,7 @@ const ARENA_W = 40;
 const ARENA_H = 16;
 const VIEW_W = 800;
 const VIEW_H = 400;
+const PULL_HELP = "Drag back and release. Keyboard: Tab to field, arrows aim, Enter fires, Escape cancels.";
 
 function worldToScreen(x, y) {
     return {
@@ -194,6 +195,9 @@ function renderHud(data) {
     put("fogshot-supply", status.supply);
     put("fogshot-cores", `Own: ${status.core}\nEnemy: ${status.enemy}`);
     put("fogshot-observation", data.view && data.view.reveal ? "OBSERVATION OPEN / REMEMBER THIS" : "ENEMY STRUCTURES HIDDEN");
+    const field = document.getElementById("fogshot-field");
+    if (!data.your_turn) put("fogshot-pull", status.turn + (data.phase === "finished" ? ". Rematch starts another duel." : ". Wait for your turn."));
+    else if (field?.dataset.yourTurn !== "true" || field?.dataset.epoch !== String(data.epoch)) put("fogshot-pull", PULL_HELP);
 }
 
 export function practiceFromLocation() {
@@ -286,6 +290,11 @@ export function mountField(parent) {
     let latest = null;
     let cancelGesture = () => {};
     parent.tabIndex = 0;
+    const resetPullHint = () => {
+        const hint = document.getElementById("fogshot-pull");
+        if (hint) hint.textContent = parent.dataset.phase === "finished" ? "Duel finished. Rematch starts another duel."
+            : parent.dataset.yourTurn === "true" ? PULL_HELP : "Wait for your turn.";
+    };
     const game = new Game({
         type: AUTO,
         parent,
@@ -347,6 +356,7 @@ export function mountField(parent) {
                 cancelGesture = () => {
                     pull = null; keyboardPull = null; activeId = null; contaminated = false;
                     parent.dataset.cancelled = "true";
+                    resetPullHint();
                     paint(this, null);
                 };
                 const finishPull = (pointer, outside) => {
@@ -364,6 +374,7 @@ export function mountField(parent) {
                     pull = null;
                     activeId = null;
                     contaminated = false;
+                    resetPullHint();
                     paint(this, null);
                     if (!allowed) {
                         if (parent) {
@@ -395,6 +406,7 @@ export function mountField(parent) {
                     }
                     if (parent.dataset.yourTurn !== "true") return;
                     keyboardPull = null;
+                    resetPullHint();
                     activeId = pointer.id;
                     pull = { x: pointer.x, y: pointer.y };
                     paint(this, pull);
@@ -468,7 +480,7 @@ export function mountField(parent) {
             if (keyboardPull && !event.repeat && window.fogshotFire) {
                 const protocol = protocolPull(sceneRef.seat, keyboardPull);
                 window.fogshotFire(protocol.x, protocol.y);
-                pull = null; keyboardPull = null; paint(sceneRef, null);
+                pull = null; keyboardPull = null; resetPullHint(); paint(sceneRef, null);
             }
             return;
         }
