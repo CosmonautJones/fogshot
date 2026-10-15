@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="800" viewBox="0 0 1600 800">
+<defs>
+ <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#112b3b"/><stop offset=".58" stop-color="#315563"/><stop offset="1" stop-color="#6b8279"/></linearGradient>
+ <radialGradient id="halo"><stop stop-color="#c4ddcf" stop-opacity=".18"/><stop offset="1" stop-color="#c4ddcf" stop-opacity="0"/></radialGradient>
+ <linearGradient id="mist" x2="0" y2="1"><stop stop-color="#86a99f" stop-opacity="0"/><stop offset="1" stop-color="#86a99f" stop-opacity=".22"/></linearGradient>
+ <linearGradient id="soil" x2="0" y2="1"><stop stop-color="#1b343b"/><stop offset="1" stop-color="#0d2029"/></linearGradient>
+ <pattern id="grain" width="37" height="29" patternUnits="userSpaceOnUse"><path d="M3 9h5m13 13h3M32 3h2" stroke="#bfd5c5" stroke-opacity=".035" stroke-width="2"/></pattern>
+</defs>
+<path fill="url(#sky)" d="M0 0h1600v800H0z"/>
+<ellipse cx="1130" cy="190" rx="330" ry="300" fill="url(#halo)"/>
+<circle cx="1130" cy="156" r="55" fill="#d5e8cf"/><path d="M1138 103a55 55 0 0 1 27 99 52 52 0 0 0-27-99" fill="#b8d0bd"/>
+<g fill="#d5e8df" opacity=".6"><circle cx="146" cy="92" r="1.8"/><circle cx="422" cy="59" r="1.4"/><circle cx="675" cy="143" r="2"/><circle cx="921" cy="83" r="1.4"/><circle cx="1396" cy="90" r="2"/><circle cx="1517" cy="255" r="1.6"/><circle cx="296" cy="205" r="1.4"/></g>
+<g fill="none" stroke="#a0bdb4" stroke-opacity=".1" stroke-width="3"><path d="M0 189h237m57 0h125M670 245h213m56 0h104M1233 305h367"/><path d="M0 205h168m464 57h177m405 60h285"/></g>
+<path d="M0 430l112-41 82 20 139-101 90 36 74-46 129 102 82-29 101-97 128 96 66-21 80 46 124-71 137 79 131-19v316H0z" fill="#355a65"/>
+<path d="M0 484l96-8 86-51 97 28 109-39 115 99 111-39 103 32 102-30 105 47 119-60 83 17 93-47 154 67 127-19v319H0z" fill="#284a55"/>
+<!-- Fixed public landmarks: distant relay mast and ridge. No match state. -->
+<g stroke="#294a53" fill="#294a53"><path d="M616 414l15-170 16 170M623 326h17m-20 36h23M618 391h27" fill="none" stroke-width="5"/><path d="M613 269h38m-26-18h13" stroke-width="4"/><circle cx="631" cy="243" r="4" fill="#acbfb0" stroke="none"/></g>
+<path d="M0 540l148-18 122 34 109-12 143 32 117-23 153 37 132-18 98 31 150-45 135 28 193-14v228H0z" fill="#203f49"/>
+<path d="M0 473h1600v327H0z" fill="url(#mist)"/>
+<path d="M0 782h1600v18H0z" fill="url(#soil)"/><path d="M0 780h1600" stroke="#82a99a" stroke-opacity=".45" stroke-width="3"/>
+<path d="M0 0h1600v800H0z" fill="url(#grain)"/>
+</svg>

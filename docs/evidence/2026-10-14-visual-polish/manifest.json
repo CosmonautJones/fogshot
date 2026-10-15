@@ -1,0 +1,30 @@
+{
+  "implementation_commit": "0306e1d8e124ba9360ca8f6432069c6a40a57edc",
+  "base": "81bb802433a9049b23c80af8e82433aff6e4b953",
+  "files": {
+    "before-renderer-fixture.png": {
+      "sha256": "60170eba513a2f9921d6748ed374996c5d5b7acc5a2c8636ea1a7badfb5b7033",
+      "bytes": 11772
+    },
+    "after-desktop.png": {
+      "sha256": "9da829800030d748473bf7350f24ee7a771cc9d26c044a5c7d437603923f58c6",
+      "bytes": 348250
+    },
+    "after-mobile-aim.png": {
+      "sha256": "5907731990ecf43e1c25869d212f2d7d57286a9466bf92126ec58b1432b0cc90",
+      "bytes": 93663
+    },
+    "after-mobile-reveal.png": {
+      "sha256": "422b8fcd819c6c6ea55dda65663656196279735657ab206addd8a239d7acdb40",
+      "bytes": 95230
+    },
+    "after-mobile-reduced-motion.png": {
+      "sha256": "c1b7dd4bad0f1938584b02e8cbdec210ba5dac2fd1a6ccce171e6f13cb4d8779",
+      "bytes": 95394
+    },
+    "presentation-metrics.json": {
+      "sha256": "72b8dd75e8f5e14d62a1e186e869691d0b1eb1915f9c2434bb85951475b100e6",
+      "bytes": 3406
+    }
+  }
+}

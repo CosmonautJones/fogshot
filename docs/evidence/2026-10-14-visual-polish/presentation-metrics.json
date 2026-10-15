@@ -1,0 +1,155 @@
+{
+  "checks": [
+    "desktop/mobile fit",
+    "touch cancel",
+    "second touch",
+    "outside cancel",
+    "keyboard/pointer switch",
+    "wall-clock reveal expiry without polls",
+    "keyboard launch",
+    "reduced-motion page"
+  ],
+  "loaded": {
+    "overflow": false,
+    "gameReadyMs": 976.2999999970198,
+    "navigationMs": 50.70000000298023,
+    "resources": [
+      {
+        "name": "index.html",
+        "bytes": 12118,
+        "durationMs": 29.099999994039536
+      },
+      {
+        "name": "_entry.js",
+        "bytes": 3735,
+        "durationMs": 2.5
+      },
+      {
+        "name": "react.js",
+        "bytes": 1238,
+        "durationMs": 2.7000000029802322
+      },
+      {
+        "name": "main.js",
+        "bytes": 2030,
+        "durationMs": 19.900000005960464
+      },
+      {
+        "name": "client_runtime.js",
+        "bytes": 46769,
+        "durationMs": 28.5
+      },
+      {
+        "name": "react-dom_client.js",
+        "bytes": 3517779,
+        "durationMs": 84.40000000596046
+      },
+      {
+        "name": "chunk-UI7CYM7W.js",
+        "bytes": 47676,
+        "durationMs": 18.19999998807907
+      },
+      {
+        "name": "chunk-ATIRDPC2.js",
+        "bytes": 13037,
+        "durationMs": 25.299999997019768
+      },
+      {
+        "name": "battlefield.js",
+        "bytes": 32696,
+        "durationMs": 5.299999997019768
+      },
+      {
+        "name": "mount_field.js",
+        "bytes": 159776,
+        "durationMs": 7.5999999940395355
+      },
+      {
+        "name": "presentation.js",
+        "bytes": 12525,
+        "durationMs": 8.700000002980232
+      },
+      {
+        "name": "playback.js",
+        "bytes": 21080,
+        "durationMs": 8.100000008940697
+      },
+      {
+        "name": "jac_prelude.js",
+        "bytes": 518369,
+        "durationMs": 19.5
+      },
+      {
+        "name": "react-error-boundary.js",
+        "bytes": 5105,
+        "durationMs": 16.599999994039536
+      },
+      {
+        "name": "auth_contract.js",
+        "bytes": 1858,
+        "durationMs": 27.599999994039536
+      },
+      {
+        "name": "react-router-dom.js",
+        "bytes": 209497,
+        "durationMs": 22.299999997019768
+      },
+      {
+        "name": "@tanstack_react-form.js",
+        "bytes": 184623,
+        "durationMs": 19
+      },
+      {
+        "name": "zod.js",
+        "bytes": 687631,
+        "durationMs": 30
+      },
+      {
+        "name": "client_runtime_core.js",
+        "bytes": 49160,
+        "durationMs": 27.5
+      },
+      {
+        "name": "field.css",
+        "bytes": 5500,
+        "durationMs": 45.79999999701977
+      },
+      {
+        "name": "phaser.js",
+        "bytes": 6685664,
+        "durationMs": 81.1000000089407
+      },
+      {
+        "name": "endpoint_cache.js",
+        "bytes": 25461,
+        "durationMs": 22.799999997019768
+      },
+      {
+        "name": "chunk-FVA2N2Y2.js",
+        "bytes": 46406,
+        "durationMs": 20.700000002980232
+      },
+      {
+        "name": "chunk-MIR64CGG.js",
+        "bytes": 17483,
+        "durationMs": 17.5
+      },
+      {
+        "name": "night-ridge.svg",
+        "bytes": 2815,
+        "durationMs": 12
+      }
+    ]
+  },
+  "effectFrames": {
+    "medianMs": 16.699999999999818,
+    "p95Ms": 16.800000000000182,
+    "frames": 120
+  },
+  "frames": {
+    "medianMs": 16.699999999999818,
+    "p95Ms": 16.799999999999955,
+    "frames": 120
+  },
+  "pageErrors": []
+}
