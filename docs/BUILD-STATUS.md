@@ -1,8 +1,8 @@
 # Build status
 
-## Solo practice backend checkpoint - 2026-10-15
+## Solo practice source checkpoint - 2026-10-15
 
-A separate branch based on reviewed head 70d289b adds an observation-only, deterministic practice bot and owner-only durable turn scheduling. All 65 Jac behavior tests pass, including both practice outcomes, duplicate/concurrent polling, restart/rematch recovery and the independently reviewed atomic-creation regressions. UI and actual sealed-game verification are in progress. See [practice evidence](PRACTICE-BOT-2026-10-15.md). PR8 and its existing local playtest are preserved.
+A separate branch based on reviewed head 70d289b adds an observation-only, deterministic practice bot and owner-only durable turn scheduling. All 65 Jac behavior tests pass, including both practice outcomes, duplicate/concurrent polling, restart/rematch recovery and the independently reviewed atomic-creation regressions. Whole-program check, 16 client tests and all four actual source HTTP/browser suites pass, including Practice lifecycle, desktop/mobile controls and the original multiplayer outcomes. Independent code/design findings have been repaired. Sealed-game verification remains in progress. See [practice evidence](PRACTICE-BOT-2026-10-15.md). PR8 and its existing local playtest are preserved.
 
 
 ## Sealed launch follow-through - 2026-10-15

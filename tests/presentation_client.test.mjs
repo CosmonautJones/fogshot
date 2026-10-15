@@ -61,3 +61,17 @@ test("one observed timestamp arms expiry even if wall time advances during proce
     assert.equal(expired.view.reveal, null);
     assert.equal(expired.broken, false);
 });
+
+test("gesture gauge fills at the reachable field edge without changing shot power", () => {
+    const left = pullFeedback("A", {x:0,y:400});
+    const right = pullFeedback("B", {x:800,y:400});
+    assert.equal(left.pullFraction, 1);
+    assert.equal(right.pullFraction, 1);
+    assert.equal(left.power, Math.hypot(6,4));
+    assert.equal(right.power, left.power);
+    assert.equal(pullFeedback("A", {x:120,y:300}).pullFraction, 0);
+});
+test("practice names its opponent and retains explicit outcomes", () => {
+    assert.equal(hudState({mode:"practice",seat:"A",your_turn:false,phase:"combat"}).turn, "Practice bot aiming");
+    assert.equal(hudState({mode:"practice",seat:"A",result:"B"}).turn, "Outpost lost");
+});

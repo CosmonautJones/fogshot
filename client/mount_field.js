@@ -109,7 +109,7 @@ function drawLauncher(pen, scene, pull) {
         pen.fillStyle(aim.valid ? 0xf1d18b : 0xb98472, 1);
         for (const point of aim.guide) pen.fillCircle(point.x, point.y, 2);
         pen.lineStyle(2, aim.valid ? 0xf1d18b : 0xb98472, .9);
-        pen.beginPath(); pen.arc(launch.x, launch.y, 29, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * aim.power / 22); pen.strokePath();
+        pen.beginPath(); pen.arc(launch.x, launch.y, 29, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * aim.pullFraction); pen.strokePath();
     }
 }
 
@@ -188,12 +188,30 @@ function renderHud(data) {
     const put = (id, text) => { const element = document.getElementById(id); if (element && element.textContent !== text) element.textContent = text; };
     const rematch = document.getElementById("fogshot-rematch");
     if (rematch) { rematch.disabled = data.phase !== "finished"; rematch.title = data.phase === "finished" ? "Play another duel" : "Available after the duel"; }
-    put("fogshot-room", data.room || "------");
+    put("fogshot-room", data.mode === "practice" ? "Practice bot" : data.room || "------");
     put("fogshot-turn", status.turn);
     put("fogshot-weapon", status.weapon);
     put("fogshot-supply", status.supply);
     put("fogshot-cores", `Own: ${status.core}\nEnemy: ${status.enemy}`);
     put("fogshot-observation", data.view && data.view.reveal ? "OBSERVATION OPEN / REMEMBER THIS" : "ENEMY STRUCTURES HIDDEN");
+}
+
+export function practiceFromLocation() {
+    return new URLSearchParams(window.location.search).get("practice") === "1";
+}
+
+export function cancelField() {
+    window.dispatchEvent(new Event("blur"));
+    const button = document.getElementById("fogshot-rematch");
+    if (button) button.disabled = true;
+}
+
+export function navigateMode(practice) {
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.hash = "";
+    if (practice) url.searchParams.set("practice", "1");
+    window.location.assign(url.toString());
 }
 
 export function roomFromLocation() {
@@ -215,6 +233,10 @@ function remember(parent, data) {
     if (data.room) {
         parent.dataset.room = data.room;
     }
+    parent.dataset.mode = data.mode || "multiplayer";
+    parent.dataset.turnNumber = String(data.turn ?? 0);
+    parent.dataset.botThinking = data.bot_thinking ? "true" : "false";
+    parent.dataset.botDueAt = String(data.bot_due_at ?? 0);
     parent.dataset.seat = data.seat || "";
     parent.dataset.phase = data.phase || "";
     parent.dataset.weapon = data.weapon || "";
@@ -460,7 +482,7 @@ export function mountField(parent) {
         paint(sceneRef, pull);
         const aim = pullFeedback(sceneRef.seat, pull);
         const hint = document.getElementById("fogshot-pull");
-        if (hint) hint.textContent = aim.valid ? `Pull ${Math.round(aim.power / 22 * 100)}%. Enter to launch, Escape to cancel.` : "Adjust the pull behind the launcher.";
+        if (hint) hint.textContent = aim.valid ? `Pull ${Math.round(aim.pullFraction * 100)}%. Enter to launch, Escape to cancel.` : "Adjust the pull behind the launcher.";
     };
     parent.addEventListener("keydown", onKey);
     const onBlur = () => cancelGesture();

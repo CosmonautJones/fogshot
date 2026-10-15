@@ -23,14 +23,14 @@ export function pullFeedback(seat, pointer) {
             guide.push({ x, y });
         }
     }
-    return { valid, power, angle, guide, origin };
+    return { valid, power, angle, guide, origin, pullFraction: Math.min(1, rawPower / Math.hypot(6,4)) };
 }
 
 export function hudState(data) {
     const result = data.result || "";
     const draw = result.toLowerCase() === "draw";
     return {
-        turn: result ? (draw ? "Draw" : result === data.seat ? "Victory" : "Outpost lost") : data.your_turn ? "Your turn" : data.seat ? "Opponent aiming" : "Connecting…",
+        turn: result ? (draw ? "Draw" : result === data.seat ? "Victory" : "Outpost lost") : data.your_turn ? "Your turn" : data.seat ? data.mode === "practice" ? "Practice bot aiming" : "Opponent aiming" : "Connecting…",
         weapon: data.phase === "recon" ? "Scout flare" : "Standard shell",
         supply: data.own_powered === false ? "Supply cut · shell available" : "Supply connected",
         enemy: data.enemy_cores === undefined ? "—" : String(data.enemy_cores),

@@ -71,3 +71,5 @@ node tests/e2e/shot_race.mjs
 FOGSHOT_PLAYWRIGHT="${playwright_dir}/node_modules/playwright" node tests/e2e/two_seats.mjs
 
 FOGSHOT_PLAYWRIGHT="${playwright_dir}/node_modules/playwright" node tests/e2e/presentation.mjs
+
+FOGSHOT_PLAYWRIGHT="${playwright_dir}/node_modules/playwright" node tests/e2e/practice.mjs
