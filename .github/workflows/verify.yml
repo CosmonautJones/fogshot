@@ -29,3 +29,6 @@ jobs:
 
       - name: Behavior suite, client playback, and two browsers
         run: bash scripts/verify.sh
+
+      - name: Sealed bundle entry and actual game smoke
+        run: bash scripts/verify-sealed.sh

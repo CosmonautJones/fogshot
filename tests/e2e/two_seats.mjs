@@ -41,15 +41,27 @@ async function pull(page, x, y) {
         null,
         { timeout: 20000 },
     );
+    // Focus can scroll the field; measure only after it has settled.
+    await page.locator("#fogshot-field").focus();
     const box = await page.locator("#fogshot-field canvas").boundingBox();
     if (!box) {
         throw new Error("the field canvas is missing");
     }
     const seat = await page.evaluate(() => document.getElementById("fogshot-field").dataset.seat);
-    await page.mouse.move(box.x + (seat === "B" ? 680 : 120) * box.width / 800, box.y + 300 * box.height / 400);
-    await page.mouse.down();
-    await page.mouse.move(box.x + (seat === "B" ? 800 - x : x) * box.width / 800, box.y + y * box.height / 400, { steps: 6 });
-    await page.mouse.up();
+    const [response] = await Promise.all([
+        page.waitForResponse(r => r.request().method() === "POST" && r.url().includes("/function/loose_shot")),
+        (async () => {
+            await page.mouse.move(box.x + (seat === "B" ? 680 : 120) * box.width / 800, box.y + 300 * box.height / 400);
+            await page.mouse.down();
+            await page.mouse.move(box.x + (seat === "B" ? 800 - x : x) * box.width / 800, box.y + y * box.height / 400, { steps: 6 });
+            await page.mouse.up();
+        })(),
+    ]);
+    const envelope = await response.json();
+    const receipt = typeof envelope.data?.result === "string" ? JSON.parse(envelope.data.result) : envelope.data?.result;
+    if (!response.ok() || !receipt?.ok) {
+        throw new Error(`seat ${seat} pull rejected: ${receipt?.code || response.status()}`);
+    }
 }
 
 const browser = await chromium.launch({

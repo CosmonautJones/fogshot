@@ -54,7 +54,7 @@ TMPDIR=/var/tmp/fogshot-moonlit-tmp \
 
 Browser checks were run with Windows Node, the X:-local Playwright 1.55.1 installation, `FOGSHOT_BROWSER_CHANNEL=chrome`, `FOGSHOT_URL=http://127.0.0.1:8180/`, and `FOGSHOT_API=http://127.0.0.1:8181`. `scripts/verify.sh` registers the new Node and browser tests for the normal clean-checkout workflow.
 
-An earlier `jac run dist/fogshot.jab` attempt failed with `Sealed application is missing executable artifact: .../main.jac`. The sealed launch path has **not** been qualified. The tested deliverable is the source/dev workflow. An initial source startup also rejected a source change during preparation; startup was repeated with edits paused. No hosted, sealed-package, human-playtest, low-end physical-device or production-ready claim is made.
+An earlier `jac run dist/fogshot.jab` attempt failed with `Sealed application is missing executable artifact: .../main.jac`. At this visual checkpoint only the source/dev workflow was qualified. The later [sealed launch follow-through](SEALED-LAUNCH-2026-10-15.md) reproduced the failure on the base commit and corrected it, including actual artifact smoke. An initial source startup also rejected a source change during preparation; startup was repeated with edits paused. No hosted, human-playtest, low-end physical-device or production-ready claim is made.
 
 Rollback: revert the feature commits or leave the branch unmerged. Main and existing WIP were not edited. Merge and deployment still require specific Fogshot approval.
 
@@ -66,6 +66,6 @@ The follow-up adds `observationAt` before playback and HUD bookkeeping, using on
 
 The independent follow-up review caught and repaired a second boundary case where two separate clock reads could straddle expiry. A time-advance regression covers the explicit cutoff. Preparation is now run with all repository edits paused; the runtime fingerprints documentation as well as source, so an earlier concurrent report update caused a safe preparation abort.
 
-The frozen expiry-repair revision also passed `jac build` (11/11 modules; 3,743,652-byte sealed output). The sealed launch path remains unqualified; no packaging-start success is inferred from build success.
+The frozen expiry-repair revision also passed `jac build` (11/11 modules; 3,743,652-byte sealed output). At that checkpoint no packaging-start success was inferred from build success. The subsequent [sealed launch follow-through](SEALED-LAUNCH-2026-10-15.md) records actual artifact startup and gameplay verification.
 
 Both final code-checkpoint Linux verification runs passed on `4d40b8cd9756203ee90945608b66f79895647731`: [push verification](https://github.com/CosmonautJones/fogshot/actions/runs/38657552634) and [PR verification](https://github.com/CosmonautJones/fogshot/actions/runs/38657598866). These ran the registered complete verification entry point, including all 50 Jac tests, all 14 Node tests, the HTTP race, both-seat game flow and presentation interactions. The subsequent README/report alignment changes documentation only.

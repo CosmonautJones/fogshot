@@ -4,7 +4,7 @@
 
 A Jac-first multiplayer physics-siege game: pull back, launch into a hidden outpost, remember the brief glimpse, and bring its infrastructure down.
 
-**Current status: Jac 0.37.23 serves the Phaser 3.90.0 field. Two isolated seats share a private room, pull-back shots follow the authoritative Pymunk path, impacts reveal temporary patches, broken supports update supply, and both seats can win and rematch. Original moonlit art, a responsive HUD and keyboard controls are implemented. Source/dev play is verified; sealed-package launch and hosting remain unqualified.** See [BUILD-STATUS](docs/BUILD-STATUS.md) and [RUNTIME](docs/RUNTIME.md).
+**Current status: Jac 0.37.23 serves the Phaser 3.90.0 field. Two isolated seats share a private room, pull-back shots follow the authoritative Pymunk path, impacts reveal temporary patches, broken supports update supply, and both seats can win and rematch. Original moonlit art, a responsive HUD and keyboard controls are implemented. Source/dev play and local sealed-package launch are verified; hosting remains unqualified.** See [BUILD-STATUS](docs/BUILD-STATUS.md) and [RUNTIME](docs/RUNTIME.md).
 
 ## Selected direction
 
