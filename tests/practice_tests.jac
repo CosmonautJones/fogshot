@@ -3,7 +3,7 @@ import json;
 import tempfile;
 import from pathlib { Path }
 import from server.clock { pin_clock }
-import from server.live { boot_match, boot_practice, practice_watch, take_shot, rematch_room, watch, open_practice, room_match, claim_player }
+import from server.live { boot_match, boot_practice, practice_watch, take_shot, rematch_room, watch, open_practice, room_match, claim_player, _practice_code }
 import from game.practice_bot { choose }
 
 ::py::
@@ -16,6 +16,57 @@ def _parallel(live, watcher):
         return watcher(live, "human")
     with ThreadPoolExecutor(max_workers=2) as pool:
         return list(pool.map(lambda _: call(), range(2)))
+def _publication_probe(opener, lookup, code_for, owner):
+    import sys
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event, current_thread
+    module = sys.modules[opener.__module__]
+    arm = module._arm
+    entered, release = Event(), Event()
+    creator = [None]
+    code = code_for(owner, 0)
+    def pause(live):
+        if current_thread().ident == creator[0]:
+            entered.set()
+            assert release.wait(5), "publication test timed out"
+        return arm(live)
+    def create():
+        creator[0] = current_thread().ident
+        return opener(owner)
+    module._arm = pause
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            future = pool.submit(create)
+            assert entered.wait(5), "creation did not reach initialization"
+            observer = pool.submit(lookup, code)
+            try:
+                partial = observer.result(timeout=0.2)
+                protected = partial is None or partial.practice is not None
+            except TimeoutError:
+                protected = True
+            release.set()
+            assert future.result(timeout=5) == code
+            final = observer.result(timeout=5)
+            return protected and (final is None or final.practice is not None)
+    finally:
+        release.set()
+        module._arm = arm
+
+def _failed_publication(opener, lookup, code_for, owner):
+    import sys
+    module = sys.modules[opener.__module__]
+    save = module._save_canonical
+    def fail(*args):
+        raise OSError("initial snapshot interrupted")
+    module._save_canonical = fail
+    try:
+        try:
+            opener(owner)
+        except OSError:
+            pass
+    finally:
+        module._save_canonical = save
+    return lookup(code_for(owner, 0)) is None
 ::py::
 
 def _ready() -> any {
@@ -159,4 +210,15 @@ test "simultaneous due owner polls serialize one accepted bot command" {
         assert json.loads(reply)["turn"] == 2;
     }
     pin_clock(-1);
+}
+
+
+test "practice never publishes an unowned room during initialization" {
+    owner = tempfile.mkdtemp(prefix="practice-publication-");
+    assert _publication_probe(open_practice, room_match, _practice_code, owner);
+}
+
+test "interrupted initial practice snapshot leaves no joinable room" {
+    owner = tempfile.mkdtemp(prefix="practice-interrupted-");
+    assert _failed_publication(open_practice, room_match, _practice_code, owner);
 }

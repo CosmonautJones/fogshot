@@ -29,6 +29,19 @@ def _practice_code(owner, attempt):
     import hashlib
     return hashlib.sha256(("practice:" + str(owner) + ":" + str(attempt)).encode()).hexdigest()[:6]
 
+def _publish_practice(directory, owner, invite, builder):
+    import os
+    import tempfile
+    from pathlib import Path
+    parent = Path(directory).parent
+    parent.mkdir(parents=True, exist_ok=True)
+    # A code-shaped directory becomes visible only after durable initialization.
+    with tempfile.TemporaryDirectory(prefix=".practice-", dir=parent) as staging:
+        live = builder(staging, owner, invite)
+        os.rename(staging, directory)
+        live.table.directory = directory
+        return live
+
 def _same_shot(payload, seat, weapon, angle, power, epoch):
     parts = str(payload).split("|")
     if len(parts) < 6:
@@ -384,13 +397,15 @@ def open_room() -> str {
         attempt = 0;
         while attempt < 8 {
             code = str(_fresh_code() as str);
-            if not (_code_ok(code) as bool) or Path(ROOM_ROOT + "/" + code).exists() {
-                attempt = attempt + 1;
-                continue;
+            with _room_lock(code) {
+                if not (_code_ok(code) as bool) or Path(ROOM_ROOT + "/" + code).exists() {
+                    attempt = attempt + 1;
+                    continue;
+                }
+                live = boot_match(ROOM_ROOT + "/" + code, code);
+                _remember_room(code, live);
+                return code;
             }
-            live = boot_match(ROOM_ROOT + "/" + code, code);
-            _remember_room(code, live);
-            return code;
         }
         return "";
     }
@@ -1025,8 +1040,8 @@ def boot_practice(directory: str, owner: str, invite: str = "aabbcc") -> LiveMat
         live.table.seat_b = "practice-bot-" + str(_fresh_code() as str);
         live.practice = {"owner": owner, "bot": live.table.seat_b,
             "memory": new_memory(live.table.epoch), "due": 0, "plan": None};
-        save_seats(live.table);
         _save_canonical(live, False);
+        save_seats(live.table);
     }
     return live;
 }
@@ -1035,17 +1050,19 @@ def open_practice(owner: str) -> str {
     with _room_lock("__create__") {
         for attempt in range(8) {
             code = str(_practice_code(owner, attempt) as str);
-            found = room_match(code);
-            if found is not None {
-                existing = found as LiveMatch;
-                if existing.practice is not None and str(existing.practice["owner"]) == owner {
-                    return code;
+            with _room_lock(code) {
+                found = room_match(code);
+                if found is not None {
+                    existing = found as LiveMatch;
+                    if existing.practice is not None and str(existing.practice["owner"]) == owner {
+                        return code;
+                    }
+                    continue;
                 }
-                continue;
+                live = _publish_practice(ROOM_ROOT + "/" + code, owner, code, boot_practice) as LiveMatch;
+                _remember_room(code, live);
+                return code;
             }
-            live = boot_practice(ROOM_ROOT + "/" + code, owner, code);
-            _remember_room(code, live);
-            return code;
         }
     }
     return "";
