@@ -37,6 +37,8 @@ jac test \
     tests/outpost_tests.jac \
     tests/b_win_tests.jac \
     tests/room_tests.jac \
+    tests/practice_bot_tests.jac \
+    tests/practice_tests.jac \
     -v
 
 node --test tests/playback_client.test.mjs tests/room_client.test.mjs tests/presentation_client.test.mjs
@@ -69,3 +71,5 @@ node tests/e2e/shot_race.mjs
 FOGSHOT_PLAYWRIGHT="${playwright_dir}/node_modules/playwright" node tests/e2e/two_seats.mjs
 
 FOGSHOT_PLAYWRIGHT="${playwright_dir}/node_modules/playwright" node tests/e2e/presentation.mjs
+
+FOGSHOT_PLAYWRIGHT="${playwright_dir}/node_modules/playwright" node tests/e2e/practice.mjs

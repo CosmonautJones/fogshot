@@ -77,7 +77,11 @@ if (joinedA.parsed.seat !== "A" || joinedB.parsed.seat !== "B" || parked.parsed.
     ]);
     const rows = [first.parsed, second.parsed];
     const accepted = rows.filter((row) => row.ok && row.weapon === "flare" && !row.code);
-    const settled = rows.filter((row) => row.code === "turn" || row.code === "busy" || row.code === "revision" || (row.ok && row.code === ""));
+    // Per-room serialization can finish the first shot before the second validates.
+    // The existing actor guard then rejects A because initiative has passed to B.
+    const settled = rows.filter((row) => row.code === "turn" || row.code === "busy" || row.code === "revision"
+        || (row.code === "actor" && !row.ok && row.seat === "A" && row.turn === 1 && row.revision === 1 && row.your_turn === false)
+        || (row.ok && row.code === ""));
     const watched = await call(tokenB, "watch_match", { invite: room, now_ms: 0 });
     const untouched = await call(tokenA, "watch_match", { invite: quiet, now_ms: 0 });
     console.log(JSON.stringify({

@@ -1,0 +1,77 @@
+{
+  "code_commit": "039a1dfc95bf057e610e72c85d2c60abfb9f4c03",
+  "base_commit": "70d289babbb9353f4bb906cbc6d135c02de6655a",
+  "sealed_bytes": 3794199,
+  "sealed_sha256": "5a3986855d9e24c8ef067b0af4dda27224b96d47a6d81ee006df46b4a5a9006b",
+  "jac_tests_passed": 65,
+  "client_tests_passed": 16,
+  "source_and_sealed_http_browser_suites": [
+    "shot_race",
+    "two_seats",
+    "presentation",
+    "practice"
+  ],
+  "sealed_chrome_measurements": {
+    "checks": [
+      "desktop/mobile fit",
+      "touch cancel",
+      "second touch",
+      "outside cancel",
+      "keyboard/pointer switch",
+      "wall-clock reveal expiry without polls",
+      "keyboard launch",
+      "reduced-motion page"
+    ],
+    "loaded": {
+      "overflow": false,
+      "gameReadyMs": 833.2999999970198,
+      "navigationMs": 254,
+      "resources": [
+        {
+          "name": "styles.css",
+          "bytes": 1963,
+          "durationMs": 45.5
+        },
+        {
+          "name": "client.Ds3rsjiW.js",
+          "bytes": 547528,
+          "durationMs": 42.20000000298023
+        },
+        {
+          "name": "night-ridge.svg",
+          "bytes": 1362,
+          "durationMs": 3.9000000059604645
+        }
+      ]
+    },
+    "effectFrames": {
+      "medianMs": 16.699999999999818,
+      "p95Ms": 16.800000000000182,
+      "frames": 120
+    },
+    "frames": {
+      "medianMs": 16.699999999999932,
+      "p95Ms": 16.799999999999955,
+      "frames": 120
+    },
+    "pageErrors": []
+  },
+  "screenshots": {
+    "practice-own-turn.png": {
+      "sha256": "c0df023a2320700ddbec4f5bc8da5b3a65d7ea7329965b3f98fbf16866cfb311",
+      "bytes": 349268
+    },
+    "practice-victory.png": {
+      "sha256": "dd787ea4bf855691ae2d4b3a9ffbbd039574237eb8fa5b3bdb96bede3314485e",
+      "bytes": 355021
+    },
+    "practice-loss.png": {
+      "sha256": "5f520639fe5f3849820c3e36a2e9853a2e2d11b5f1d671cb965601796d39df01",
+      "bytes": 349679
+    },
+    "practice-mobile-thinking.png": {
+      "sha256": "4d1b7ac3fac2580b7a6516268619e81a87cbd1577f5866b3424920f7e8808521",
+      "bytes": 96481
+    }
+  }
+}

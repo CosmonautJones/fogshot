@@ -1,11 +1,19 @@
 # Build status
 
+## Solo practice playable and sealed - 2026-10-15
+
+Draft [PR #9](https://github.com/CosmonautJones/fogshot/pull/9), stacked on frozen PR8, adds a fair deterministic practice bot, owner-only durable turns, Practice/Multiplayer controls and a presentation-only reachable-pull gauge correction. The code checkpoint is `039a1dfc95bf057e610e72c85d2c60abfb9f4c03`.
+
+All 65 Jac tests, whole-program check, 16 client tests and all four actual source HTTP/browser suites pass. The sealed build, executable-entry guard and all four actual packaged-game suites also pass, including both winners, rematches, privacy, concurrent due polling, reload, delayed replies, desktop/mobile controls and reduced motion. Independent code/design findings were repaired and final review found no remaining blockers. See [practice report, captures, hashes and limits](PRACTICE-BOT-2026-10-15.md). Final-head clean Linux CI is tracked by PR9.
+
+The separate loopback sealed playtest is http://127.0.0.1:8182/?practice=1. PR8's reviewed head `70d289b` and port8180 preview are preserved; main is unchanged. Single-process hosting only was tested; no merge or deployment.
+
 ## Sealed launch follow-through - 2026-10-15
 
 The missing executable main artifact also reproduced on untouched base commit 81bb802. An empty server boot block now retains the entry under pinned Jac 0.37.23. The corrected sealed artifact starts, serves HTTP 200 and passes actual authenticated shot-race and both-seat wins/rematch/privacy smoke. A focused package-entry guard and actual sealed-game CI step prevent build success from being mistaken for launch success. Independent code review cleared the correction and runner cleanup. See [sealed launch evidence](SEALED-LAUNCH-2026-10-15.md), including the preserved initial browser stall and focused test hardening. Hosting remains unqualified; no merge or deployment.
 
 
-## Moonlit outpost presentation — 2026-10-14
+## Moonlit outpost presentation â€” 2026-10-14
 
 A cohesive local visual slice is implemented on `codex/fogshot-moonlit-polish-20261014`, based on `81bb802`. Original moonlit landscape/material art, responsive status HUD, pull feedback, bounded observation effects and keyboard controls. Gameplay authority and private projection modules are unchanged. Independent design/code review findings were repaired.
 
@@ -429,7 +437,7 @@ JAC_TEST_STRICT=1 jac test tests/physics_driver_tests.jac tests/scene_host_tests
 
 Result: `36 passed in 1.53s`. That count was measured again. It is not copied from the older note.
 
-Review findings F01–F07 were still present in that source. F04 (shared password and one room) and hosting stay deferred. No two-browser smoke was rerun before the clock edit; the earlier QA browsers were not repeated as if they were a new result.
+Review findings F01â€“F07 were still present in that source. F04 (shared password and one room) and hosting stay deferred. No two-browser smoke was rerun before the clock edit; the earlier QA browsers were not repeated as if they were a new result.
 
 ## Server clock
 
