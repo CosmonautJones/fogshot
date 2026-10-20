@@ -123,3 +123,7 @@ This Jac 0.37.23 install has no `jac hammer` command. `jac --help` lists `jac sc
 - Restarting `jac run` replays committed journal shots into a new physics world. The journal stores the shot payload, not a pose snapshot. An uncommitted pending file is dropped.
 - An unauthenticated `POST /function/join_seat` with no `Authorization` header returned HTTP 401. The request, status, and body are in [BUILD-STATUS.md](BUILD-STATUS.md).
 - Scene-host coverage is the handler set in Jac. The browser path destroys `Phaser.Game` in the effect cleanup.
+
+## Sealed web-app launch - 2026-10-15
+
+The pinned runtime needs a server boot artifact even when the app entry renders only client JSX. Fogshot retains it with an empty entry block. Use bash scripts/verify-sealed.sh after the normal verification entry point; it builds and checks the bundle and exercises the real packaged app. App and API share the selected port in sealed mode. See [exact commands and verification](SEALED-LAUNCH-2026-10-15.md) for the supported loopback and worker environment settings and pre-existing failure classification. Hosting remains unqualified.

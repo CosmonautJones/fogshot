@@ -4,7 +4,7 @@
 
 A Jac-first multiplayer physics-siege game: pull back, launch into a hidden outpost, remember the brief glimpse, and bring its infrastructure down.
 
-**Current status: Jac 0.37.23 serves a Phaser 3.90.0 field at `jac run`. A pull submits to one shared match, the drawn shot is the Pymunk path, a hitting shell collapses the braced post, and the impact reveal closes. A second browser joins that match and does not receive the sentinel coordinates. The supply walk is still not tied to the break. JacHammer has not been deployed.** See [BUILD-STATUS](docs/BUILD-STATUS.md) and [RUNTIME](docs/RUNTIME.md).
+**Current status: Jac 0.37.23 serves the Phaser 3.90.0 field. Two isolated seats share a private room, pull-back shots follow the authoritative Pymunk path, impacts reveal temporary patches, broken supports update supply, and both seats can win and rematch. Original moonlit art, a responsive HUD and keyboard controls are implemented. Source/dev play and local sealed-package launch are verified; hosting remains unqualified.** See [BUILD-STATUS](docs/BUILD-STATUS.md) and [RUNTIME](docs/RUNTIME.md).
 
 ## Selected direction
 
@@ -31,4 +31,4 @@ Do not guess a Jac scaffold or toolchain version. Start with the runtime gate in
 
 Commit and push small, coherent changes frequently. Preserve hidden-state privacy, do not publish credentials or user data, and never claim a deployment or test result without evidence.
 
-A distribution license has not yet been selected. This bootstrap contains no game art or reference-game assets.
+A distribution license has not yet been selected. Original presentation artwork and provenance are documented in [assets/README.md](assets/README.md); no reference-game assets are included. See the [visual polish report and evidence](docs/VISUAL-POLISH-2026-10-14.md).

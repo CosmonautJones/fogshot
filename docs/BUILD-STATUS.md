@@ -1,5 +1,17 @@
 # Build status
 
+## Sealed launch follow-through - 2026-10-15
+
+The missing executable main artifact also reproduced on untouched base commit 81bb802. An empty server boot block now retains the entry under pinned Jac 0.37.23. The corrected sealed artifact starts, serves HTTP 200 and passes actual authenticated shot-race and both-seat wins/rematch/privacy smoke. A focused package-entry guard and actual sealed-game CI step prevent build success from being mistaken for launch success. Independent code review cleared the correction and runner cleanup. See [sealed launch evidence](SEALED-LAUNCH-2026-10-15.md), including the preserved initial browser stall and focused test hardening. Hosting remains unqualified; no merge or deployment.
+
+
+## Moonlit outpost presentation — 2026-10-14
+
+A cohesive local visual slice is implemented on `codex/fogshot-moonlit-polish-20261014`, based on `81bb802`. Original moonlit landscape/material art, responsive status HUD, pull feedback, bounded observation effects and keyboard controls. Gameplay authority and private projection modules are unchanged. Independent design/code review findings were repaired.
+
+Pinned Jac check/build passed; 50 Jac tests and 14 Node tests passed. Real shot race, two-seat wins/rematch/privacy and the new mobile/presentation checks passed. See [the detailed report](VISUAL-POLISH-2026-10-14.md) for exact commands, measurements, provenance, evidence and remaining limitations. Source/dev play is verified; an earlier sealed `.jab` start failed with a missing executable main artifact, so packaged launch is not qualified. Implementation checkpoint `0306e1d8e124ba9360ca8f6432069c6a40a57edc` was committed and pushed to the feature branch. The linked gallery is the subsequent evidence checkpoint. Remote Linux verification of `d8f1ca3` passed; a prior timing-dependent expired-poll break flag was nevertheless repaired with a deterministic regression, as recorded in the report. No merge or deployment.
+
+
 Recorded: 2026-10-04
 
 ## Repository
