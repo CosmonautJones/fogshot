@@ -1,0 +1,26 @@
+{
+  "base_commit": "238e8b51dbc9f4f8a2d7a6fac6f20d1e483df744",
+  "local_checks": {
+    "jac_client_check": "pass",
+    "node_client_tests": 16,
+    "presentation_real_browser": "pass",
+    "practice_real_browser": "pass",
+    "two_seats_real_browser": "pass"
+  },
+  "startupHeldForChecks": true,
+  "loading_time_benchmark": false,
+  "captures": {
+    "after-desktop.png": {
+      "bytes": 356464,
+      "sha256": "b1cc9b4dec058cf37cc4ae4097ba7932169af6c810d67d8d365e1c1da9a7a2eb"
+    },
+    "after-mobile-aim.png": {
+      "bytes": 98310,
+      "sha256": "acb3e87524ceaf02163b4a787ca68d3d2f115108804b13a0ea2fba55dd6938dc"
+    },
+    "before-loading.png": {
+      "bytes": 344098,
+      "sha256": "8f5fa25e70da6af355dabb582fc71539f6cd5cf1e89f2b560a71d6759dec98fd"
+    }
+  }
+}

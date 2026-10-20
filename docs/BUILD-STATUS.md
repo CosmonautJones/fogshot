@@ -1,5 +1,11 @@
 # Build status
 
+## First-play controls visibility - 2026-10-15
+
+A separate branch based on frozen PR9 head `238e8b5` fixes hidden keyboard aim help and damaged startup placeholders. The existing hint is visible below the field, linked to its accessible description, and resets when aiming ends or the turn changes. Existing Practice, objectives, Rematch and Multiplayer behavior is preserved.
+
+Affected Jac check, 16 client tests and actual presentation/practice/two-seat browser checks pass. Independent design/code review found no remaining blockers after repairing a broad paragraph selector in the multiplayer test. No heavy local suite or sealed rebuild was repeated while TravOS owned that slot. See [the before/after report and limitations](FIRST-PLAY-CONTROLS-2026-10-15.md). The first PR CI exposed a timing-dependent startup-route teardown race; the test now waits for active handlers before removing interception, preserving errors and assertions. Independent review and the focused browser rerun passed. Draft PR10 checks track final-head full CI; no merge or deployment.
+
 ## Solo practice playable and sealed - 2026-10-15
 
 Draft [PR #9](https://github.com/CosmonautJones/fogshot/pull/9), stacked on frozen PR8, adds a fair deterministic practice bot, owner-only durable turns, Practice/Multiplayer controls and a presentation-only reachable-pull gauge correction. The code checkpoint is `039a1dfc95bf057e610e72c85d2c60abfb9f4c03`.
