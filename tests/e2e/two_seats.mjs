@@ -202,7 +202,7 @@ try {
     );
     const wonA = await read(a);
     const wonB = await read(b);
-    if (!wonA.cap.includes("Result A") || !wonB.cap.includes("Result A") || wonA.ready !== "false" || wonB.ready !== "false") {
+    if (!wonA.cap.includes("Victory") || !wonB.cap.includes("Outpost lost") || wonA.ready !== "false" || wonB.ready !== "false") {
         fail(`victory state did not reach both seats: ${JSON.stringify({ wonA, wonB })}`);
     }
     const generation = wonA.epoch;
@@ -284,7 +284,7 @@ try {
     );
     const beatA = await read(a);
     const beatB = await read(b);
-    if (!beatA.cap.includes("Result B") || !beatB.cap.includes("Result B") || beatA.ready !== "false" || beatB.ready !== "false") {
+    if (!beatA.cap.includes("Outpost lost") || !beatB.cap.includes("Victory") || beatA.ready !== "false" || beatB.ready !== "false") {
         fail(`seat B's win did not reach both seats: ${JSON.stringify({ beatA, beatB })}`);
     }
     const beaten = beatB.epoch;

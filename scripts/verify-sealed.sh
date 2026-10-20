@@ -52,4 +52,5 @@ if [[ -z "$ready" ]]; then
 fi
 FOGSHOT_API="$url" node tests/e2e/shot_race.mjs
 FOGSHOT_URL="$url/" FOGSHOT_PLAYWRIGHT="${FOGSHOT_PLAYWRIGHT:-${root}/.jac/e2e/node_modules/playwright}" node tests/e2e/two_seats.mjs
+FOGSHOT_URL="$url/" FOGSHOT_API="$url" FOGSHOT_PLAYWRIGHT="${FOGSHOT_PLAYWRIGHT:-${root}/.jac/e2e/node_modules/playwright}" node tests/e2e/practice.mjs
 echo "sealed app smoke ok"

@@ -16,6 +16,10 @@ This is not a JavaScript game with a cosmetic Jac endpoint. It is also not a cla
 
 Two independent browser sessions. One launcher and one supported objective per side. A free opening scout shot for each player, then alternating shell attacks. Local impact reveals, physically falling debris, a connected-supply indicator, and a reliable victory/draw result. The full four-objective, three-weapon economy comes afterward.
 
+## Solo practice
+
+Choose **Practice** to play one deterministic opponent with the same fog, flare and pull rules. It remembers only coarse positions exposed by its own scouting and waits for your reveal to finish before firing. Reload resumes the owner's private practice match; **Rematch** resets it after a result, and **Multiplayer** returns to a friend room. The bot pauses while the page is closed. See [practice evidence and limits](docs/PRACTICE-BOT-2026-10-15.md).
+
 ## Documents
 
 - [Game concept](docs/GAME-CONCEPT.md)

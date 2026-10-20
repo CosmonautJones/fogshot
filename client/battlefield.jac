@@ -2,10 +2,10 @@
 
 import from "react" { useEffect }
 import from "@jac/runtime" { SignupResult, jacLogin, jacSignup }
-import from "./mount_field.js" { mountField, publishRoom, roomFromLocation }
-import from "./playback.js" { sampleAt, shellWord }
+import from "./mount_field.js" { mountField, publishRoom, roomFromLocation, practiceFromLocation, navigateMode, cancelField }
+import from "./playback.js" { sampleAt, shellWord, isStale }
 import from "./presentation.js" { hudState }
-import from server.live { create_room, join_seat, loose_shot, play_again, release_seat, watch_match }
+import from server.live { create_room, create_practice, join_seat, loose_shot, play_again, release_seat, watch_match }
 
 glob _set_caption: any = None;
 glob _apply: any = None;
@@ -21,6 +21,8 @@ glob _revision: int = 0;
 glob _phase: str = "recon";
 glob _pending: str = "";
 glob _pending_weapon: str = "";
+glob _generation: int = 0;
+glob _set_switching: any = None;
 
 def _email() -> str {
     if _email_ready != "" {
@@ -85,12 +87,15 @@ def _note(raw: str) -> None {
         return;
     }
     parsed = JSON.parse(raw) as any;
+    if isStale({"epoch": _epoch, "revision": _revision}, parsed) { return; }
     _remember(parsed);
     supply = "on" if parsed.own_powered != False else "dark";
     shell = shellWord(parsed.shot_ready != False, parsed.your_turn == True);
-    text = "Room " + _room + ". Seat " + str(parsed.seat) + ". " + ("Your turn. " if parsed.your_turn == True else "Opponent aiming. ") + ("Scout the hidden outpost with a flare." if str(parsed.phase) == "recon" else "Shell " + shell + ". Supply " + supply + ".");
-    if parsed.result {
-        text = text + " Result " + str(parsed.result) + ".";
+    label = "Solo practice" if str(parsed.mode or "") == "practice" else "Room " + _room;
+    status = hudState(parsed) as any;
+    text = label + ". Seat " + str(parsed.seat) + ". " + str(status.turn) + ".";
+    if not parsed.result {
+        text = text + (" Scout the hidden outpost with a flare." if str(parsed.phase) == "recon" else " Shell " + shell + ". Supply " + supply + ".");
     }
     if parsed.code {
         text = text + " (" + str(parsed.code) + ")";
@@ -99,20 +104,20 @@ def _note(raw: str) -> None {
 }
 
 async def _again() -> None {
-    if not _joined {
-        return;
-    }
+    if not _joined { return; }
+    generation = _generation;
     _pending = "";
     _pending_weapon = "";
     raw: str = "";
     try {
         raw = await play_again(_room);
     } except Exception {
-        if _set_caption {
+        if generation == _generation and _set_caption {
             _set_caption.call(None, "Rematch was rejected.");
         }
         return;
     }
+    if generation != _generation { return; }
     if _apply {
         _apply.call(None, raw);
     }
@@ -120,68 +125,64 @@ async def _again() -> None {
 }
 
 async def _join() -> None {
-    if _joining or _joined {
-        return;
-    }
+    if _joining or _joined { return; }
     _joining = True;
-    email = _email();
-    password = _password();
-    signup_result: SignupResult | None = None;
-    login_ok: bool = False;
-    joined: str = "";
-    created: str = "";
-    signup_result = await jacSignup(email, password);
-    login_ok = await jacLogin(email, password);
-    if not login_ok {
-        _joining = False;
-        if _set_caption {
-            _set_caption.call(None, "Login failed.");
-        }
-        return;
-    }
-    code = str(roomFromLocation());
-    if code == "" {
-        created = await create_room();
-        opened = JSON.parse(created) as any;
-        code = str(opened.room or "");
-        if code == "" or code == "None" {
-            _joining = False;
-            if _set_caption {
-                _set_caption.call(None, "The room was not created.");
-            }
+    generation = _generation;
+    try {
+        if _set_caption { _set_caption.call(None, "Reconnecting to practice." if practiceFromLocation() else "Joining the match."); }
+        signup_result: SignupResult | None = await jacSignup(_email(), _password());
+        login_ok: bool = await jacLogin(_email(), _password());
+        if generation != _generation { return; }
+        if not login_ok {
+            if _set_caption { _set_caption.call(None, "Login failed. Reload to retry."); }
             return;
         }
-        publishRoom(code);
-    }
-    _room = code;
-    joined = await join_seat(_room);
-    _joined = True;
-    if _apply {
-        _apply.call(None, joined);
-    }
-    _note(joined);
-    if _timer is None {
-        _timer = setInterval(lambda { _poll(); }, 700);
+        code = str(roomFromLocation());
+        if practiceFromLocation() or code == "" {
+            created = await create_practice() if practiceFromLocation() else await create_room();
+            if generation != _generation { return; }
+            opened = JSON.parse(created) as any;
+            code = str(opened.room or "");
+            if not opened.ok or code == "" {
+                if _set_caption { _set_caption.call(None, "The room was not created. Reload to retry."); }
+                return;
+            }
+            publishRoom(code);
+        }
+        _room = code;
+        joined = await join_seat(_room);
+        if generation != _generation { return; }
+        parsed = JSON.parse(joined) as any;
+        if not parsed.ok {
+            if _set_caption { _set_caption.call(None, "The room is unavailable. Choose another mode."); }
+            return;
+        }
+        _joined = True;
+        if _apply { _apply.call(None, joined); }
+        _note(joined);
+        if _timer is None { _timer = setInterval(lambda { _poll(); }, 700); }
+    } except Exception {
+        if generation == _generation and _set_caption { _set_caption.call(None, "Connection failed. Reload to retry."); }
+    } finally {
+        if generation == _generation {
+            _joining = False;
+            if _set_switching { _set_switching.call(None, False); }
+        }
     }
 }
 
 async def _poll() -> None {
-    if not _joined {
-        return;
-    }
+    if not _joined { return; }
+    generation = _generation;
     raw: str = "";
-    try {
-        raw = await watch_match(_room, 0);
-    } except Exception {
-        return;
-    }
-    if _apply {
-        _apply.call(None, raw);
-    }
+    try { raw = await watch_match(_room, 0); } except Exception { return; }
+    if generation != _generation or not _joined { return; }
+    if _apply { _apply.call(None, raw); }
     _note(raw);
 }
 
 async def _release(px: float, py: float) -> None {
+    generation = _generation;
     if not _joined {
         return;
     }
@@ -205,11 +206,12 @@ async def _release(px: float, py: float) -> None {
             1.0
         );
     } except Exception {
-        if _set_caption {
+        if generation == _generation and _set_caption {
             _set_caption.call(None, "The server rejected the pull.");
         }
         return;
     }
+    if generation != _generation or not _joined { return; }
     _pending = "";
     _pending_weapon = "";
     if _apply {
@@ -218,8 +220,55 @@ async def _release(px: float, py: float) -> None {
     _note(fired);
 }
 
+async def _recover_mode() -> None {
+    generation = _generation;
+    try {
+        raw = await join_seat(_room);
+        if generation != _generation { return; }
+        restored = JSON.parse(raw) as any;
+        if restored.ok and str(restored.seat or "") != "" {
+            _joined = True;
+            if _apply { _apply.call(None, raw); }
+            _note(raw);
+            _timer = setInterval(lambda { _poll(); }, 700);
+        } else {
+            if _set_caption { _set_caption.call(None, "Connection interrupted. Reload to reconnect."); }
+        }
+    } except Exception {
+        if generation == _generation and _set_caption { _set_caption.call(None, "Connection interrupted. Reload to reconnect."); }
+    }
+    if generation == _generation and _set_switching { _set_switching.call(None, False); }
+}
+
+async def _change_mode(practice: bool) -> None {
+    owned_seat = _joined;
+    if _set_switching { _set_switching.call(None, True); }
+    _generation = _generation + 1;
+    _joined = False;
+    _pending = "";
+    _pending_weapon = "";
+    cancelField();
+    if _timer is not None { clearInterval(_timer); _timer = None; }
+    try {
+        if owned_seat and _room != "" {
+            released = JSON.parse(await release_seat(_room)) as any;
+            if not released.ok {
+                await _recover_mode();
+                return;
+            }
+        }
+        navigateMode(practice);
+    } except Exception {
+        await _recover_mode();
+    }
+}
+
 def:pub Battlefield -> JsxElement {
     has caption: str = "Joining the match.";
+    has changing: bool = True;
+    has in_practice: bool = bool(practiceFromLocation());
+
+    def switching(value: bool) { changing = value; }
 
     def remember(text: str) {
         caption = text;
@@ -232,6 +281,7 @@ def:pub Battlefield -> JsxElement {
         }
         handle = mountField(parent) as any;
         _set_caption = remember;
+        _set_switching = switching;
         _apply = lambda (raw: str) {
             handle.apply(raw);
         };
@@ -240,6 +290,8 @@ def:pub Battlefield -> JsxElement {
         };
         _join();
         return lambda {
+            _generation = _generation + 1;
+            _set_switching = None;
             room = _room;
             _joined = False;
             _room = "";
@@ -265,7 +317,8 @@ def:pub Battlefield -> JsxElement {
                 <div className="tagline">Aim from memory. Bring the unseen down.</div>
             </div>
             <div className="utilities">
-                <div className="room-card"><span>PRIVATE ROOM</span><strong id="fogshot-room">------</strong></div>
+                <div className="room-card"><span>{"SOLO PRACTICE" if in_practice else "PRIVATE ROOM"}</span><strong id="fogshot-room">------</strong></div>
+                <button id="fogshot-mode" className="utility-button" disabled={changing} onClick={lambda (event: any) { _change_mode(not in_practice); }}>{"Multiplayer" if in_practice else "Practice"}</button>
                 <button id="fogshot-rematch" className="utility-button" onClick={lambda (event: any) { _again(); }}>Rematch</button>
             </div>
         </header>
@@ -276,10 +329,10 @@ def:pub Battlefield -> JsxElement {
             <div className="field-hint" id="fogshot-observation">ENEMY STRUCTURES HIDDEN</div>
         </div>
         <div className="status-bar" aria-label="Match status">
-            <div className="stat"><span className="stat-label">INITIATIVE</span><strong id="fogshot-turn">Connecting…</strong></div>
+            <div className="stat"><span className="stat-label">INITIATIVE</span><strong id="fogshot-turn">Connectingâ€¦</strong></div>
             <div className="stat"><span className="stat-label">IN THE SLING</span><strong id="fogshot-weapon">Scout flare</strong></div>
-            <div className="stat"><span className="stat-label">YOUR OUTPOST</span><strong id="fogshot-supply">Connecting…</strong></div>
-            <div className="stat"><span className="stat-label">OBJECTIVES</span><strong className="core-count" id="fogshot-cores">—</strong></div>
+            <div className="stat"><span className="stat-label">YOUR OUTPOST</span><strong id="fogshot-supply">Connectingâ€¦</strong></div>
+            <div className="stat"><span className="stat-label">OBJECTIVES</span><strong className="core-count" id="fogshot-cores">â€”</strong></div>
         </div>
         <div className="instructions">
             <div className="instruction"><b><span className="step-number">01</span>Pull, then let go.</b>Drag backward from the launcher to set direction and strength. Release to launch.</div>
@@ -288,7 +341,7 @@ def:pub Battlefield -> JsxElement {
         </div>
         <p className="match-caption" id="fogshot-caption" role="status" aria-live="polite">{caption}</p>
         <footer className="field-footer">
-            <details><summary>Controls &amp; inviting a friend</summary><p>Send this page URL to a friend to join the private room. Focus the battlefield with Tab: arrow keys adjust the pull, Enter launches, Escape cancels. With touch or mouse, release outside the field to cancel. Motion follows your device preference. <span id="fogshot-pull">Pull to aim.</span></p></details>
+            <details><summary>{"Controls & practice" if in_practice else "Controls & inviting a friend"}</summary><p>{"One practice opponent. Same fog and launch rules. The bot waits for your reveal, then thinks and fires. " if in_practice else "Send this page URL to a friend to join the private room. "} Focus the battlefield with Tab: arrow keys adjust the pull, Enter launches, Escape cancels. With touch or mouse, release outside the field to cancel. Motion follows your device preference. <span id="fogshot-pull">Pull to aim.</span></p></details>
             <span className="edition">FIELD STUDY / FIRST PLAYABLE</span>
         </footer>
     </main>
