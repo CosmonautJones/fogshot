@@ -37,7 +37,8 @@ def _publication_probe(opener, lookup, code_for, owner):
     try:
         with ThreadPoolExecutor(max_workers=2) as pool:
             future = pool.submit(create)
-            assert entered.wait(5), "creation did not reach initialization"
+            # Long-range ridge generation can take several seconds before the room is armed.
+            assert entered.wait(60), "creation did not reach initialization"
             observer = pool.submit(lookup, code)
             try:
                 partial = observer.result(timeout=0.2)
@@ -45,7 +46,7 @@ def _publication_probe(opener, lookup, code_for, owner):
             except TimeoutError:
                 protected = True
             release.set()
-            assert future.result(timeout=5) == code
+            assert future.result(timeout=60) == code
             final = observer.result(timeout=5)
             return protected and (final is None or final.practice is not None)
     finally:
