@@ -79,3 +79,21 @@ a private per-room bot seed and the player's practice win streak.
 - practice rematch chains at 1280x800 (mouse) and 390x844 (touch).
 
 Each duel opens with the old scripted flare (20,300) + lob (10,390). Results are in `qa/proc-report.json`.
+
+### Results
+
+Run on the dev server, 2026-10-21:
+
+- **Scripted flare+lob:** won 0 of 10 duels (10 distinct ridges).
+- **Outcomes:** human 4, bot 5, unfinished 1. The scripted "human" only fires the fixed script and follow-up list, so these numbers say nothing about the balance of a real player.
+- **Console:** 0 errors and 0 page errors. The only warnings are headless Chromium's software-WebGL notices.
+- **Layout:** no horizontal overflow at 390x844.
+- **Generation:** about 0.3-12 s per ridge on the box (median about 1.5 s). Fresh ridges come from a background pool, so a room or rematch usually does not wait.
+- **Before the anti-script guard:** the lob won 4 of 8 playtest duels, and 15 of 20 ridges in a headless sweep. The same sweep found the most popular single pull hit 41% of ridges.
+
+## Known limits
+
+- **Fallback ridges.** About 10% of ridge numbers have no fair layout under a given server secret. They hand over to a deterministic fallback, so a shared link can show a different number than it asked for.
+- **Anti-script coverage.** The guard covers the human's scripted flare followed by the lob. A bot flare that happens to nudge cover first is not simulated. The popularity bound (25%) is checked with free flight on a 20 px grid, not with a full Pymunk run.
+- **Scoutless practice duels.** If neither side reveals the other's core, a practice duel can go on for a long time. The playtest had one such duel unfinished after 32 shells. The bot's error narrows each shell, but its blind search is still a seeded wander.
+- **Pool is per process.** The ridge pool lives in memory per server process. Multi-worker hosting would just generate more.
