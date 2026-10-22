@@ -114,6 +114,273 @@ def _push(body, x, y, amount):
         dx, dy, span = 0.0, 1.0, 1.0
     body.apply_impulse_at_world_point((dx / span * amount, dy / span * amount), (float(pos.x), float(pos.y)))
 
+import bisect
+import math
+import zlib as _zlib
+
+class TerrainMask:
+    """Authoritative destructible ground: a signed density grid sampled from the public ridge.
+
+    density = 0.5 + (ground(x) - y) / CELL, then each crater takes min(density, 0.5 + (dist - r) / CELL)
+    (signed-distance CSG). march_soft traces the 0.5 iso-line per 4 m chunk into static segments.
+    Untouched chunks keep the original polyline segments, so a field with no craters is unchanged.
+    """
+    CELL = 0.25
+    CHUNK = 4.0
+    Y0 = -6.0
+    Y1 = 16.0
+    BEDROCK = -5.0
+    PAD = 2.5
+    RADIUS = 0.08
+
+    def __init__(self, terrain, pads):
+        self.xs = [float(p[0]) for p in terrain]
+        self.hs = [float(p[1]) for p in terrain]
+        self.x0 = self.xs[0]
+        self.x1 = self.xs[-1]
+        self.pads = [float(p) for p in pads]
+        self.rows = int(round((self.Y1 - self.Y0) / self.CELL)) + 1
+        self.cols = int(round((self.x1 - self.x0) / self.CELL)) + 1
+        self.per = int(round(self.CHUNK / self.CELL))
+        self.chunks = int(math.ceil((self.x1 - self.x0) / self.CHUNK))
+        self.columns = {}
+        self.craters = []
+        self.carved = set()
+        self.shapes = {}
+        self.original = {}
+
+    def ground(self, x):
+        xs, hs = self.xs, self.hs
+        if x <= xs[0]:
+            return hs[0]
+        if x >= xs[-1]:
+            return hs[-1]
+        i = bisect.bisect_right(xs, x) - 1
+        t = (x - xs[i]) / (xs[i + 1] - xs[i])
+        return hs[i] + (hs[i + 1] - hs[i]) * t
+
+    def column(self, i):
+        col = self.columns.get(i)
+        if col is None:
+            g = self.ground(self.x0 + i * self.CELL)
+            col = [0.5 + (g - (self.Y0 + j * self.CELL)) / self.CELL for j in range(self.rows)]
+            self.columns[i] = col
+        return col
+
+    def padded(self, x):
+        return any(abs(x - p) <= self.PAD for p in self.pads)
+
+    def carve(self, cx, cy, r):
+        """Remove a disc; returns the sorted chunk indices whose collision must be rebuilt."""
+        # Rounded first, so a rewind from the saved marks rebuilds exactly the same ground.
+        cx, cy, r = round(float(cx), 4), round(float(cy), 4), round(float(r), 4)
+        self.craters.append((cx, cy, r))
+        return self._apply(cx, cy, r)
+
+    def _apply(self, cx, cy, r):
+        c = self.CELL
+        i0 = max(0, int(math.floor((cx - r - c - self.x0) / c)))
+        i1 = min(self.cols - 1, int(math.ceil((cx + r + c - self.x0) / c)))
+        j0 = max(0, int(math.floor((max(self.BEDROCK, cy - r - c) - self.Y0) / c)))
+        j1 = min(self.rows - 1, int(math.ceil((cy + r + c - self.Y0) / c)))
+        touched = set()
+        for i in range(i0, i1 + 1):
+            x = self.x0 + i * c
+            if self.padded(x):
+                continue
+            col = self.column(i)
+            changed = False
+            for j in range(j0, j1 + 1):
+                y = self.Y0 + j * c
+                if y < self.BEDROCK:
+                    continue
+                d = 0.5 + (math.hypot(x - cx, y - cy) - r) / c
+                if d < col[j]:
+                    col[j] = d
+                    changed = True
+            if changed:
+                k = min(self.chunks - 1, i // self.per)
+                touched.add(k)
+                # A sample on a chunk edge belongs to both neighbours.
+                if i % self.per == 0 and k > 0:
+                    touched.add(k - 1)
+        return sorted(touched)
+
+    def sample(self, point):
+        x, y = point[0], point[1]
+        i = int(round((x - self.x0) / self.CELL))
+        j = int(round((y - self.Y0) / self.CELL))
+        i = min(self.cols - 1, max(0, i))
+        j = min(self.rows - 1, max(0, j))
+        return self.column(i)[j]
+
+    def contours(self, k):
+        import pymunk
+        from pymunk.autogeometry import march_soft, simplify_curves
+        a = self.x0 + k * self.CHUNK
+        b = min(self.x1, a + self.CHUNK)
+        xs = int(round((b - a) / self.CELL)) + 1
+        # Only sample up to just above the highest ground in the chunk (craters only lower it).
+        top = max(self.ground(a + t * self.CELL) for t in range(xs))
+        rows = min(self.rows, int(math.ceil((top + 1.0 - self.Y0) / self.CELL)) + 1)
+        y1 = self.Y0 + (rows - 1) * self.CELL
+        lines = march_soft(pymunk.BB(a, self.Y0, b, y1), xs, rows, 0.5, self.sample)
+        out = []
+        for line in lines:
+            pts = simplify_curves(line, 0.02)
+            if len(pts) >= 2:
+                out.append([(round(float(p.x), 5), round(float(p.y), 5)) for p in pts])
+        return out
+
+
+def _mask_new(space, terrain, pads):
+    import pymunk
+    mask = TerrainMask(terrain, pads)
+    for shape in list(space.shapes):
+        if isinstance(shape, pymunk.Segment) and shape.body is space.static_body and getattr(shape, "fog_id", "") == "ground":
+            mid = (float(shape.a.x) + float(shape.b.x)) / 2.0
+            k = min(mask.chunks - 1, max(0, int(math.floor((mid - mask.x0) / mask.CHUNK))))
+            mask.original.setdefault(k, []).append(shape)
+    return mask
+
+def _segments(space, lines):
+    import pymunk
+    made = []
+    for line in lines:
+        for a, b in zip(line, line[1:]):
+            seg = pymunk.Segment(space.static_body, a, b, TerrainMask.RADIUS)
+            seg.friction = 0.9
+            seg.elasticity = 0.0
+            seg.collision_type = 1
+            seg.fog_id = "ground"
+            made.append(seg)
+    if made:
+        space.add(*made)
+    return made
+
+def _mask_rebuild(space, mask, chunks):
+    # Swap only the dirty chunks' static segments: original polyline out, marched contour in.
+    count = 0
+    for k in chunks:
+        if k not in mask.carved:
+            for seg in mask.original.get(k, []):
+                if seg in space.shapes:
+                    space.remove(seg)
+            mask.carved.add(k)
+        old = mask.shapes.get(k, [])
+        if old:
+            space.remove(*[seg for seg in old if seg in space.shapes])
+        mask.shapes[k] = _segments(space, mask.contours(k))
+        count += len(mask.shapes[k])
+    return count
+
+def _mask_rewind(space, mask, craters):
+    # Rebuild the ground from the public ridge plus exactly these craters (rollback / reload).
+    before = set(mask.carved)
+    mask.columns = {}
+    mask.craters = []
+    touched = set()
+    for c in craters:
+        touched.update(mask.carve(c[0], c[1], c[2]))
+    for k in sorted(before - touched):
+        old = mask.shapes.pop(k, [])
+        if old:
+            space.remove(*[seg for seg in old if seg in space.shapes])
+        for seg in mask.original.get(k, []):
+            if seg not in space.shapes:
+                space.add(seg)
+        mask.carved.discard(k)
+    _mask_rebuild(space, mask, sorted(touched))
+    return len(touched)
+
+def _mask_craters(mask):
+    return [[c[0], c[1], c[2]] for c in mask.craters]
+
+def _mask_lines(mask):
+    # Every static ground segment, chunk by chunk (tests / determinism checks).
+    out = []
+    for k in range(mask.chunks):
+        segs = mask.shapes.get(k) if k in mask.carved else mask.original.get(k, [])
+        for seg in segs or []:
+            out.append((round(float(seg.a.x), 4), round(float(seg.a.y), 4), round(float(seg.b.x), 4), round(float(seg.b.y), 4)))
+    return out
+
+def _wake(space, x, y, reach):
+    # Bodies near removed ground may be asleep on it; wake them so they fall into the crater.
+    import pymunk
+    woke = 0
+    for body in space.bodies:
+        if body.body_type != pymunk.Body.DYNAMIC:
+            continue
+        p = body.position
+        if abs(float(p.x) - x) <= reach and abs(float(p.y) - y) <= reach + 1.0:
+            body.activate()
+            woke += 1
+    return woke
+
+def _seed(text):
+    return _zlib.crc32(str(text).encode("utf-8")) & 0xFFFFFFFF
+
+def _score(w, h, count, seed):
+    # Pre-scored fracture: cut the longest piece across its long side at 38-62%, repeat.
+    state = seed or 1
+    def rand():
+        nonlocal state
+        state = (1103515245 * state + 12345) & 0x7FFFFFFF
+        return state / 0x7FFFFFFF
+    pieces = [(0.0, 0.0, float(w), float(h))]
+    while len(pieces) < count:
+        pieces.sort(key=lambda p: -p[2] * p[3])
+        ox, oy, pw, ph = pieces.pop(0)
+        u = 0.38 + 0.24 * rand()
+        if pw >= ph:
+            a = pw * u
+            pieces.append((ox - pw / 2.0 + a / 2.0, oy, a, ph))
+            pieces.append((ox + pw / 2.0 - (pw - a) / 2.0, oy, pw - a, ph))
+        else:
+            a = ph * u
+            pieces.append((ox, oy - ph / 2.0 + a / 2.0, pw, a))
+            pieces.append((ox, oy + ph / 2.0 - (ph - a) / 2.0, pw, ph - a))
+    pieces.sort(key=lambda p: (round(p[0], 6), round(p[1], 6)))
+    return [(round(p[0], 6), round(p[1], 6), round(p[2], 6), round(p[3], 6)) for p in pieces]
+
+def _fragment(space, parent, ox, oy, fw, fh, mass, fog_id):
+    # A fragment takes its place in the parent block and the parent's velocity at that point,
+    # plus a small outward kick so the pieces separate.
+    import pymunk
+    pos = parent.local_to_world((ox, oy))
+    vel = parent.velocity_at_world_point(pos)
+    centre = parent.position
+    dx, dy = float(pos.x - centre.x), float(pos.y - centre.y)
+    span = (dx * dx + dy * dy) ** 0.5 or 1.0
+    body = pymunk.Body(mass, pymunk.moment_for_box(mass, (fw, fh)))
+    body.position = pos
+    body.angle = parent.angle
+    body.velocity = (float(vel.x) + dx / span * 0.6, float(vel.y) + dy / span * 0.6 + 0.4)
+    body.angular_velocity = parent.angular_velocity
+    shape = pymunk.Poly.create_box(body, (fw, fh))
+    shape.friction = 0.8
+    shape.elasticity = 0.0
+    shape.collision_type = 2
+    shape.fog_id = fog_id
+    space.add(body, shape)
+    return (body, shape)
+
+def _loose_box(space, fog_id, w, h, mass):
+    import pymunk
+    body = pymunk.Body(mass, pymunk.moment_for_box(mass, (w, h)))
+    shape = pymunk.Poly.create_box(body, (w, h))
+    shape.friction = 0.8
+    shape.elasticity = 0.0
+    shape.collision_type = 2
+    shape.fog_id = fog_id
+    space.add(body, shape)
+    return (body, shape)
+
+def _clock():
+    import time
+    return time.perf_counter()
+
 def _static_box(space, body_id, x, y, w, h):
     import pymunk
     body = pymunk.Body(body_type=pymunk.Body.STATIC)
@@ -128,7 +395,16 @@ def _static_box(space, body_id, x, y, w, h):
 ::py::
 
 # Dynamic outpost blocks leave the solver when they break, so later shots pass through.
-glob SHATTER_ROLES: list[str] = ["timber", "stone"];
+# In a destructible world (long range) timber and stone first split into debris fragments.
+glob SHATTER_ROLES: list[str] = ["timber", "stone", "debris"];
+glob FRACTURE_ROLES: list[str] = ["timber", "stone"];
+# Fragments per broken block, debris health, and the live debris cap (oldest despawn first).
+glob FRAGMENTS: dict[str, int] = {"timber": 3, "stone": 4};
+glob DEBRIS_HEALTH: dict[str, float] = {"timber": 0.25, "stone": 0.7};
+glob MAX_DEBRIS: int = 24;
+glob DEBRIS_KICK: float = 4.0;
+# A moving fragment must land at least this impulse on something to hurt it (crush damage).
+glob CRUSH_MIN: float = 0.15;
 
 obj BodyState {
     has id: str;
@@ -179,6 +455,12 @@ obj Tracked {
     has pin_ay: float = 0.0;
     has pin_bx: float = 0.0;
     has pin_by: float = 0.0;
+    has w: float = 0.0;
+    has h: float = 0.0;
+    has density: float = 0.0;
+    has parent: str = "";
+    # Step a fragment was made on: the blast that broke its block does not also pulverise it.
+    has born: int = -1;
 }
 
 def _post_solve(arbiter: any, _space: any, data: any) -> None {
@@ -213,6 +495,12 @@ obj PhysicsWorld {
     has blast_step: int = -1;
     has blast_x: float = 0.0;
     has blast_y: float = 0.0;
+    # Destruction (long range): carved ground mask, crater radius, debris bookkeeping and costs.
+    has mask: any = None;
+    has crater_radius: float = 0.0;
+    has fracture: bool = False;
+    has debris_specs: list[dict[str, any]] = [];
+    has carve_ms: list[float] = [];
 
     def ensure() -> None {
         if self.space is not None {
@@ -307,7 +595,10 @@ obj PhysicsWorld {
             role=role,
             body=body,
             shape=shape,
-            health=health
+            health=health,
+            w=w,
+            h=h,
+            density=mass / max(0.0001, w * h)
         ));
     }
 
@@ -403,10 +694,10 @@ obj PhysicsWorld {
     def _falling(self_a: str, self_b: str) -> bool {
         left = self.find(self_a);
         right = self.find(self_b);
-        if left is not None and left.broken {
+        if left is not None and (left.broken or left.role == "debris") {
             return True;
         }
-        if right is not None and right.broken {
+        if right is not None and (right.broken or right.role == "debris") {
             return True;
         }
         return False;
@@ -444,6 +735,14 @@ obj PhysicsWorld {
         if not projectile and mag < 0.05 {
             return;
         }
+        if not projectile and mag < CRUSH_MIN and self._debris_only(a, b) {
+            return;
+        }
+        if not projectile and self._rubble(a, b) {
+            # Fragments landing on the ground or on each other just settle; only a blast or
+            # a crush against a real block wears them down.
+            return;
+        }
         self.damaged.append(key);
         self.pending.append((a, b, mag));
     }
@@ -455,6 +754,27 @@ obj PhysicsWorld {
             self.hurt(item[0], item[2]);
             self.hurt(item[1], item[2]);
         }
+    }
+
+    def _debris_only(a: str, b: str) -> bool {
+        # Neither side is a block already falling apart: only fragments are moving.
+        left = self.find(a);
+        right = self.find(b);
+        if left is not None and left.broken {
+            return False;
+        }
+        if right is not None and right.broken {
+            return False;
+        }
+        return True;
+    }
+
+    def _rubble(a: str, b: str) -> bool {
+        left = self.find(a);
+        right = self.find(b);
+        loose_left = left is None or left.role == "debris";
+        loose_right = right is None or right.role == "debris";
+        return loose_left and loose_right and (left is not None or right is not None);
     }
 
     def find(body_id: str) -> Tracked | None {
@@ -484,11 +804,115 @@ obj PhysicsWorld {
             if track.role == "core" {
                 self.space.remove(track.shape);
             }
+            if self.fracture and track.role in FRACTURE_ROLES {
+                self._fracture(track);
+            }
             if track.role in SHATTER_ROLES {
                 _shatter(self.space, track.body, track.shape);
             }
             track.broken = True;
         }
+    }
+
+    # ---- destruction: carved ground (pymunk.autogeometry) and pre-scored block fracture.
+    def enable_destruction(terrain: list[list[float]], pads: list[float], crater_radius: float) -> None {
+        self.ensure();
+        self.mask = _mask_new(self.space, terrain, pads);
+        self.crater_radius = crater_radius;
+        self.fracture = True;
+        self.debris_specs = [];
+        self.carve_ms = [];
+        # Idle bodies sleep (cheap on phones' worth of debris); carving wakes the ones nearby.
+        self.space.sleep_time_threshold = 0.5;
+    }
+
+    def carve(x: float, y: float, radius: float) -> int {
+        if self.mask is None {
+            return 0;
+        }
+        started = _clock() as float;
+        dirty = self.mask.carve(x, y, radius);
+        made = _mask_rebuild(self.space, self.mask, dirty) as int;
+        _wake(self.space, x, y, radius + 1.5);
+        self.carve_ms.append(round(((_clock() as float) - started) * 1000.0, 3));
+        return made;
+    }
+
+    def craters() -> list[list[float]] {
+        if self.mask is None {
+            return [];
+        }
+        return _mask_craters(self.mask) as list[list[float]];
+    }
+
+    def rewind_craters(marks: list[list[float]]) -> None {
+        if self.mask is None {
+            return;
+        }
+        _mask_rewind(self.space, self.mask, marks);
+        _wake(self.space, 0.0, 0.0, 99999.0);
+    }
+
+    def ground_lines() -> list[any] {
+        if self.mask is None {
+            return [];
+        }
+        return _mask_lines(self.mask) as list[any];
+    }
+
+    def _fracture(track: Tracked) -> None {
+        material = track.role;
+        count = FRAGMENTS.get(material, 3);
+        if track.w * track.h < 0.05 {
+            count = 2;
+        }
+        pieces = _score(track.w, track.h, count, _seed(track.id)) as list[tuple[float, float, float, float]];
+        index = 0;
+        for piece in pieces {
+            fid = track.id + "~" + str(index);
+            index = index + 1;
+            mass = max(0.02, track.density * piece[2] * piece[3]);
+            made = _fragment(self.space, track.body, piece[0], piece[1], piece[2], piece[3], mass, fid) as tuple[any, any];
+            self.tracks.append(Tracked(id=fid, role="debris", body=made[0], shape=made[1],
+                health=DEBRIS_HEALTH.get(material, 0.3), w=piece[2], h=piece[3], density=track.density, parent=track.id, born=self.step_index));
+            self.debris_specs.append({"id": fid, "parent": track.id, "material": material, "w": piece[2], "h": piece[3], "mass": mass});
+        }
+        self._cap_debris();
+    }
+
+    def _cap_debris() -> None {
+        alive = [t for t in self.tracks if t.role == "debris" and not t.broken];
+        extra = len(alive) - MAX_DEBRIS;
+        if extra <= 0 {
+            return;
+        }
+        gone: list[str] = [];
+        for track in alive[:extra] {
+            _shatter(self.space, track.body, track.shape);
+            gone.append(track.id);
+        }
+        self.tracks = [t for t in self.tracks if t.id not in gone];
+        self.debris_specs = [d for d in self.debris_specs if str(d["id"]) not in gone];
+    }
+
+    # Recreate a saved fragment (reload); restore() then puts it where it was.
+    def add_debris(spec: dict[str, any]) -> None {
+        self.ensure();
+        made = _loose_box(self.space, str(spec["id"]), float(spec["w"]), float(spec["h"]), float(spec["mass"])) as tuple[any, any];
+        material = str(spec["material"]);
+        self.tracks.append(Tracked(id=str(spec["id"]), role="debris", body=made[0], shape=made[1],
+            health=DEBRIS_HEALTH.get(material, 0.3), w=float(spec["w"]), h=float(spec["h"]),
+            density=float(spec["mass"]) / max(0.0001, float(spec["w"]) * float(spec["h"])), parent=str(spec["parent"])));
+        self.debris_specs.append(spec);
+    }
+
+    def debris_material(track: Tracked) -> str {
+        for spec in self.debris_specs {
+            if str(spec["id"]) == track.id {
+                return str(spec["material"]);
+            }
+        }
+        return "timber";
     }
 
     def read_state(track: Tracked) -> BodyState {
@@ -540,6 +964,7 @@ obj PhysicsWorld {
             }
         }
         self.tracks = kept;
+        self.debris_specs = [d for d in self.debris_specs if str(d["id"]) in keep];
         for item in saved {
             track = self.find(item.id);
             if track is None {
@@ -558,6 +983,10 @@ obj PhysicsWorld {
             }
             if track.role in SHATTER_ROLES and not item.broken {
                 _keep_body(self.space, track.body, track.shape);
+            }
+            if track.role in SHATTER_ROLES and item.broken {
+                # A reload rebuilds every block; a block that had shattered must leave again.
+                _shatter(self.space, track.body, track.shape);
             }
             if not item.broken and track.pin is None and track.hinged {
                 fresh = _pymunk().PinJoint(
@@ -601,13 +1030,24 @@ obj PhysicsWorld {
                 continue;
             }
             share = 1.0 - gap / self.blast_radius;
-            hits.append((track.id, self.blast_damage * share));
+            if not (track.role == "debris" and track.born == self.step_index) {
+                hits.append((track.id, self.blast_damage * share));
+            }
             if track.kind == "dynamic" {
-                _push(track.body, self.blast_x, self.blast_y, self.blast_push * share);
+                push = self.blast_push * share;
+                if track.role == "debris" {
+                    # A fragment is light: cap its kick at DEBRIS_KICK m/s so pieces tumble out
+                    # of the burst instead of leaving the field.
+                    push = min(push, float(track.body.mass) * DEBRIS_KICK);
+                }
+                _push(track.body, self.blast_x, self.blast_y, push);
             }
         }
         for hit in hits {
             self.hurt(hit[0], hit[1]);
+        }
+        if self.mask is not None and self.crater_radius > 0.0 {
+            self.carve(self.blast_x, self.blast_y, self.crater_radius);
         }
     }
 

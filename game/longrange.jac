@@ -22,6 +22,8 @@ import from game.layout {
 import from physics.pymunk_driver { PhysicsWorld }
 
 glob LONG_TERRAIN_LEFT: float = -4.0;
+# Ground removed by a shell burst (the blast itself reaches LONG_BLAST_R).
+glob LONG_CRATER_R: float = 1.4;
 glob LONG_MIN_W: float = 124.0;
 # Every generated core is at least this far from the enemy launcher.
 glob LONG_MIN_ATTACK: float = 82.0;
@@ -260,17 +262,23 @@ def long_kills(layout: dict[str, any], seat: str, angle: float, power: float) ->
     return bool(_kills(hit[0], hit[1], hit[2], core, LONG_SHELL_R, kill_reach()));
 }
 
-def arm_long(world: PhysicsWorld) -> PhysicsWorld {
+def arm_long(world: PhysicsWorld, layout: any = None) -> PhysicsWorld {
     world.blast_radius = LONG_BLAST_R;
     world.blast_damage = LONG_BLAST_DMG;
     world.blast_push = LONG_BLAST_PUSH;
     world.shell_drag = LONG_DRAG;
     world.settle_after = LONG_SETTLE;
+    if layout is not None {
+        # Shells carve craters in the ground and blocks split into debris. Launcher pads are
+        # reinforced: no crater reaches within 2.5 m of either launcher.
+        pads = [float(layout["launcher_a"][0]), float(layout["launcher_b"][0])];
+        world.enable_destruction(layout["terrain"], pads, LONG_CRATER_R);
+    }
     return world;
 }
 
 def build_long(layout: dict[str, any], settle: bool = True) -> PhysicsWorld {
-    return arm_long(build_world(layout, settle));
+    return arm_long(build_world(layout, settle), layout);
 }
 
 def fire_long(world: PhysicsWorld, layout: dict[str, any], seat: str, angle: float, power: float, shell: bool) -> None {

@@ -4,7 +4,7 @@
 // not integrate a shot or decide a hit.
 import { AUTO, Game, Scale } from "phaser";
 import "../assets/field.css";
-import { bodySize, pullFeedback, hudState, protocolPull, observationAt, trianglePoints, headingOf, easeOutBack, easeOutCubic, burst, stepShards, bannerFor, recordAfter, recordLabel, ridgeLines, terrainPolygon, ridgeLabel, CLASSIC_FIELD, fieldOf, fieldPixels, toScreen, dragPull, padFromAim, longAim, previewArc, clampScroll, cameraHome, cameraOn, overviewRect, overviewToWorld, rangeMarks, LONG_FLOOR } from "./presentation.js";
+import { bodySize, pullFeedback, hudState, protocolPull, observationAt, trianglePoints, headingOf, easeOutBack, easeOutCubic, burst, stepShards, bannerFor, recordAfter, recordLabel, ridgeLines, terrainPolygon, ridgeLabel, CLASSIC_FIELD, fieldOf, fieldPixels, toScreen, dragPull, padFromAim, longAim, previewArc, clampScroll, cameraHome, cameraOn, overviewRect, overviewToWorld, rangeMarks, LONG_FLOOR, carveTerrain, craterRims } from "./presentation.js";
 import { isStale, releaseAllowed, sampleAt, stepWatch } from "./playback.js";
 
 const VIEW_W = 800;
@@ -73,6 +73,8 @@ function impact(scene, point, weapon, heading) {
     }
     const back = heading === null ? -Math.PI / 2 : heading + Math.PI;
     spawn(scene, burst(point.x, point.y, { count: 22, speed: 170, life: .8, size: 4.5, heading: back, spread: Math.PI * 1.3 }), [0xf2cb78, 0xe5b56c, 0xfff3d4, 0x8fa9a0]);
+    // Thrown dirt: heavier, slower clods from the crater.
+    if (isLong()) spawn(scene, burst(point.x, point.y, { count: 18, speed: 150, life: 1.3, size: 5, heading: -Math.PI / 2, spread: Math.PI * .9 }), [0x6b5236, 0x8a6a43, 0x4a3524, 0x5f4a33]);
     flash(scene, point.x, point.y, 0xf2cb78, 34, .4);
     shake(scene, 150, .005);
 }
@@ -316,11 +318,33 @@ function revealedBodies(view) {
     return view.reveal.bodies;
 }
 
+// A fragment of a broken block: the parent's material, darker, with a cracked face.
+function drawDebris(pen, body, friendly) {
+    if (body.alive === false) return;
+    const center = worldToScreen(body.x, body.y);
+    if (center.x < -40 || center.x > fieldPixels(FIELD).w + 40) return;
+    const { width, height } = bodySize(body);
+    if (!width || !height) return;
+    const stone = body.role === "debris-stone";
+    const tone = stone ? (friendly ? 0x3d5a5f : 0x766a59) : (friendly ? 0x34564e : 0x7a5d3b);
+    pen.save();
+    pen.translateCanvas(center.x, center.y);
+    pen.rotateCanvas(-body.angle);
+    pen.fillStyle(tone, 1);
+    pen.fillRect(-width / 2, -height / 2, width, height);
+    pen.lineStyle(1, friendly ? 0x8fc5b6 : 0xe5b56c, .45);
+    pen.strokeRect(-width / 2, -height / 2, width, height);
+    pen.lineStyle(1, 0x0c1c22, .6);
+    pen.lineBetween(-width / 2, -height * .1, width * .1, height / 2);
+    pen.restore();
+}
+
 function drawBodies(pen, bodies, friendly, scene) {
     for (const body of bodies) {
         if (["ground", "marker", "launcher"].includes(body.role)) continue;
         // Shattered blocks are gone from the world; do not leave a grey ghost.
         if (body.alive === false && ["timber", "stone", "spur"].includes(body.role)) continue;
+        if (String(body.role || "").startsWith("debris")) { drawDebris(pen, body, friendly); continue; }
         const center = worldToScreen(body.x, body.y);
         if (center.x < -40 || center.x > fieldPixels(FIELD).w + 40) continue;
         const { width, height } = bodySize(body);
@@ -402,11 +426,24 @@ function launcherOf(scene) {
     return worldToScreen(spot.x, spot.y);
 }
 
+// Your launcher pad is reinforced (never cratered); the enemy pad is secret, so it is not used.
+function ownPads(data) {
+    const spot = (data.view && data.view.own || []).find(body => body.role === "launcher");
+    return spot && Number.isFinite(spot.x) ? [spot.x] : [];
+}
+
 // Public terrain and seeded distant ridgelines. Redrawn only when the ridge changes.
 function paintLand(scene, data) {
     const pen = scene.landPen;
     if (!pen) return;
-    const key = `${data.ridge ?? 0}:${data.epoch ?? 0}:${FIELD.mode}:${scene.seat || ""}`;
+    // A new crater only appears when the shell that made it lands in the playback, not when the
+    // server's answer arrives (that would spoil a 3-7 s flight).
+    const sent = Array.isArray(data.craters) ? data.craters : [];
+    const flying = Boolean(scene.path && scene.path.length && !scene.landed);
+    const craters = flying && Array.isArray(scene.shownCraters) && scene.shownCraters.length <= sent.length ? scene.shownCraters : sent;
+    if (!flying) scene.shownCraters = sent;
+    if (scene.fieldParent) scene.fieldParent.dataset.cratersShown = String(craters.length);
+    const key = `${data.ridge ?? 0}:${data.epoch ?? 0}:${FIELD.mode}:${scene.seat || ""}:${JSON.stringify(craters)}`;
     if (scene.landKey === key) return;
     scene.landKey = key;
     pen.clear();
@@ -431,7 +468,10 @@ function paintLand(scene, data) {
         farPen.strokePath();
     });
     for (const label of scene.rangeLabels || []) label.setVisible(false);
-    const ground = terrainPolygon(data.terrain, FIELD.h, isLong() ? LONG_FLOOR : 0);
+    // Craters the server let this seat see, cut into the public ridge (your own pad never caves).
+    const pads = ownPads(data);
+    const land = craters.length ? carveTerrain(data.terrain, craters, pads) : data.terrain;
+    const ground = terrainPolygon(land, FIELD.h, isLong() ? LONG_FLOOR : 0);
     if (ground.length && Number(data.ridge || 0) > 0) {
         pen.fillStyle(0x16303a, 1);
         pen.beginPath(); pen.moveTo(ground[0].x, ground[0].y);
@@ -448,6 +488,23 @@ function paintLand(scene, data) {
         pen.beginPath(); pen.moveTo(ground[0].x, ground[0].y);
         for (const p of ground.slice(0, -2)) pen.lineTo(p.x, p.y);
         pen.strokePath();
+        // Scorched crater bowls with a few thrown-up clods on the lips.
+        for (const rim of craterRims(data.terrain, craters, pads, 2.5, FIELD.h)) {
+            pen.fillStyle(0x0f2229, .9);
+            pen.beginPath(); pen.moveTo(rim[0].x, rim[0].y);
+            for (const p of rim) pen.lineTo(p.x, p.y + 5);
+            pen.lineTo(rim[rim.length - 1].x, rim[rim.length - 1].y); pen.closePath(); pen.fillPath();
+            pen.lineStyle(3, 0x4a3524, .85);
+            pen.beginPath(); pen.moveTo(rim[0].x, rim[0].y);
+            for (const p of rim) pen.lineTo(p.x, p.y);
+            pen.strokePath();
+            const a = rim[0], b = rim[rim.length - 1];
+            pen.fillStyle(0x6b5236, .9);
+            for (const [p, side] of [[a, -1], [b, 1]]) {
+                pen.fillTriangle(p.x - 6, p.y + 1, p.x + 6, p.y + 1, p.x + side * 2, p.y - 5);
+                pen.fillCircle(p.x + side * 7, p.y - 1, 2);
+            }
+        }
     }
     const crest = scene.crestPen;
     if (crest) crest.clear();
@@ -457,20 +514,21 @@ function paintLand(scene, data) {
         for (const p of ground.slice(0, -2)) crest.lineTo(p.x, p.y);
         crest.strokePath();
     }
+    scene.terrain = land;
     if (isLong() && Array.isArray(data.terrain)) {
         // Range marks from your launcher: read distance, then pick angle and power.
         const spot = launcherWorld(scene);
         const marks = rangeMarks(scene.seat, spot.x, FIELD);
         marks.slice(0, (scene.rangeLabels || []).length).forEach((mark, i) => {
             const at = worldToScreen(mark.x, 0);
-            const gy = groundScreenY(data.terrain, at.x);
+            const gy = groundScreenY(land, at.x);
             pen.lineStyle(2, 0xb8d6c6, .35);
             pen.lineBetween(at.x, gy - 12, at.x, gy + 2);
             scene.rangeLabels[i].setText(mark.label).setFontSize(Math.round(10 * Math.min(1.8, uiScale(scene)))).setPosition(at.x, gy - 16 - 12 * Math.min(1.8, uiScale(scene))).setAlpha(.75).setVisible(true);
         });
         // The midline: no man's land starts here.
         const mid = worldToScreen(FIELD.w / 2, 0);
-        const my = groundScreenY(data.terrain, mid.x);
+        const my = groundScreenY(land, mid.x);
         for (let y = my - 200; y < my; y += 14) { pen.lineStyle(1, 0xe2d4a8, .18); pen.lineBetween(mid.x, y, mid.x, y + 7); }
     }
 }
@@ -687,6 +745,8 @@ function remember(parent, data) {
     parent.dataset.fieldMode = FIELD.mode;
     parent.dataset.fieldW = String(FIELD.w);
     parent.dataset.ridge = String(data.ridge ?? 0);
+    parent.dataset.craters = String(Array.isArray(data.craters) ? data.craters.length : 0);
+    parent.dataset.debris = String([...(data.view && data.view.own || []), ...(data.view && data.view.reveal && data.view.reveal.bodies || [])].filter(body => String(body.role || "").startsWith("debris") && body.alive !== false).length);
     parent.dataset.botLevel = String(data.bot_level ?? "");
     const spot = (data.view && data.view.own || []).find(body => body.role === "launcher");
     if (spot) { parent.dataset.launcherX = String(spot.x); parent.dataset.launcherY = String(spot.y); }
@@ -997,6 +1057,8 @@ export function mountField(parent) {
                 });
             },
             update(time, delta) {
+                // Frame-rate readout for QA (once a second, no layout cost).
+                if (!this.fpsAt || time - this.fpsAt > 1000) { this.fpsAt = time; parent.dataset.fps = String(Math.round(this.game.loop.actualFps)); }
                 animate(this, time, delta);
                 if (isLong()) steerCamera(this, time, delta);
                 const path = this.path;
@@ -1026,6 +1088,7 @@ export function mountField(parent) {
                     this.landedAt = time;
                     this.landPoint = worldToScreen(last[0], last[1]);
                     impact(this, this.landPoint, this.pathWeapon || this.weapon, this.heading);
+                    if (this.lastData) paintLand(this, this.lastData);
                 }
                 if (point) {
                     const next = worldToScreen(point[0], point[1]);
@@ -1333,7 +1396,7 @@ export function mountField(parent) {
                 parent.dataset.shotTime = "";
             }
             remember(parent, data);
-            if (Array.isArray(data.terrain)) sceneRef.terrain = data.terrain;
+            if (Array.isArray(data.terrain) && !(Array.isArray(data.craters) && data.craters.length)) sceneRef.terrain = data.terrain;
             paintLand(sceneRef, data);
             paint(sceneRef, pull);
             readout();
