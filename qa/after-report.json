@@ -1,0 +1,194 @@
+{
+  "prefix": "after",
+  "runs": [
+    {
+      "vp": "desktop",
+      "console": [],
+      "pageErrors": [],
+      "shots": [
+        {
+          "round": 0,
+          "x": 20,
+          "y": 300,
+          "ok": true,
+          "code": "",
+          "turn": 1,
+          "phase": "recon",
+          "result": ""
+        },
+        {
+          "round": 0,
+          "x": 10,
+          "y": 390,
+          "ok": true,
+          "code": "",
+          "turn": 3,
+          "phase": "finished",
+          "result": "A"
+        },
+        {
+          "round": 1,
+          "x": 20,
+          "y": 300,
+          "ok": true,
+          "code": "",
+          "turn": 1,
+          "phase": "recon",
+          "result": ""
+        },
+        {
+          "round": 1,
+          "x": 10,
+          "y": 390,
+          "ok": true,
+          "code": "",
+          "turn": 3,
+          "phase": "finished",
+          "result": "A"
+        }
+      ],
+      "results": [
+        {
+          "round": 0,
+          "phase": "finished",
+          "result": "A",
+          "turnNumber": "3",
+          "hud": "Victory"
+        },
+        {
+          "round": 1,
+          "phase": "finished",
+          "result": "A",
+          "turnNumber": "3",
+          "hud": "Victory"
+        }
+      ],
+      "notes": [],
+      "timeToReadyMs": 684,
+      "idleFrames": {
+        "frames": 152,
+        "avg": 16.54,
+        "p95": 16.8,
+        "max": 16.8
+      },
+      "overflow": false,
+      "fieldBox": {
+        "x": 77,
+        "y": 180,
+        "width": 1126,
+        "height": 563
+      },
+      "flightFrames": {
+        "frames": 91,
+        "avg": 16.54,
+        "p95": 16.8,
+        "max": 16.8
+      },
+      "rematchMs": 114,
+      "loss": {
+        "result": "B",
+        "hud": "Outpost lost"
+      },
+      "rKeyRematch": true,
+      "resizedBox": {
+        "x": 37,
+        "y": 198,
+        "width": 626,
+        "height": 313
+      },
+      "resizedOverflow": false
+    },
+    {
+      "vp": "mobile",
+      "console": [],
+      "pageErrors": [],
+      "shots": [
+        {
+          "round": 0,
+          "x": 20,
+          "y": 300,
+          "ok": true,
+          "code": "",
+          "turn": 1,
+          "phase": "recon",
+          "result": ""
+        },
+        {
+          "round": 0,
+          "x": 10,
+          "y": 390,
+          "ok": true,
+          "code": "",
+          "turn": 3,
+          "phase": "finished",
+          "result": "A"
+        },
+        {
+          "round": 1,
+          "x": 20,
+          "y": 300,
+          "ok": true,
+          "code": "",
+          "turn": 1,
+          "phase": "recon",
+          "result": ""
+        },
+        {
+          "round": 1,
+          "x": 10,
+          "y": 390,
+          "ok": true,
+          "code": "",
+          "turn": 3,
+          "phase": "finished",
+          "result": "A"
+        }
+      ],
+      "results": [
+        {
+          "round": 0,
+          "phase": "finished",
+          "result": "A",
+          "turnNumber": "3",
+          "hud": "Victory"
+        },
+        {
+          "round": 1,
+          "phase": "finished",
+          "result": "A",
+          "turnNumber": "3",
+          "hud": "Victory"
+        }
+      ],
+      "notes": [],
+      "timeToReadyMs": 612,
+      "idleFrames": {
+        "frames": 152,
+        "avg": 16.56,
+        "p95": 16.7,
+        "max": 16.8
+      },
+      "overflow": false,
+      "fieldBox": {
+        "x": 11,
+        "y": 190,
+        "width": 368,
+        "height": 184
+      },
+      "flightFrames": {
+        "frames": 91,
+        "avg": 16.49,
+        "p95": 16.8,
+        "max": 16.8
+      },
+      "rematchMs": 124,
+      "resizedBox": {
+        "x": 129,
+        "y": 76,
+        "width": 586,
+        "height": 293
+      },
+      "resizedOverflow": false
+    }
+  ]
+}

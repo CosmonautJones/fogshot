@@ -66,6 +66,16 @@ def _password() -> str {
     return _password_ready;
 }
 
+def _has_saved_identity() -> bool {
+    store = (window as any).sessionStorage;
+    if not store {
+        return False;
+    }
+    saved_email = str(store.getItem("fogshot-email") or "");
+    saved_password = str(store.getItem("fogshot-password") or "");
+    return saved_email != "" and saved_email != "None" and saved_password != "" and saved_password != "None";
+}
+
 def _command() -> str {
     token = (crypto as any).randomUUID() as str;
     return "cmd-" + str(Date.now()) + "-" + token;
@@ -130,8 +140,19 @@ async def _join() -> None {
     generation = _generation;
     try {
         if _set_caption { _set_caption.call(None, "Reconnecting to practice." if practiceFromLocation() else "Joining the match."); }
-        signup_result: SignupResult | None = await jacSignup(_email(), _password());
-        login_ok: bool = await jacLogin(_email(), _password());
+        # Returning tabs already own an account. Registering it again is a
+        # rejected request (HTTP 400 in the console on every reload), so try
+        # the saved credentials first and only sign up when they are new or
+        # no longer accepted.
+        returning = _has_saved_identity();
+        login_ok: bool = False;
+        if returning {
+            login_ok = await jacLogin(_email(), _password());
+        }
+        if not login_ok {
+            signup_result: SignupResult | None = await jacSignup(_email(), _password());
+            login_ok = await jacLogin(_email(), _password());
+        }
         if generation != _generation { return; }
         if not login_ok {
             if _set_caption { _set_caption.call(None, "Login failed. Reload to retry."); }
@@ -322,7 +343,7 @@ def:pub Battlefield -> JsxElement {
                 <button id="fogshot-rematch" className="utility-button" onClick={lambda (event: any) { _again(); }}>Rematch</button>
             </div>
         </header>
-        <div className="briefing"><h2>Night shift at the outpost</h2><span>01 / RIDGELINE</span></div>
+        <div className="briefing"><h2>Night shift at the outpost</h2><div className="briefing-meta"><span className="record-chip" id="fogshot-record" title="Your duels on this device">RECORD 0-0</span><span>01 / RIDGELINE</span></div></div>
         <div className="arena-frame">
             <div id="fogshot-field" role="group" aria-describedby="fogshot-pull" aria-label="Fogshot battlefield. Drag backward from your launcher and release to fire. Use the keyboard controls described below."></div>
             <div className="field-caption">THE RIDGELINE / AFTER DARK</div>
