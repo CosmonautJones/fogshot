@@ -5,8 +5,8 @@ import math;
 import tempfile;
 import time;
 import from physics.pymunk_driver { PhysicsWorld, MAX_DEBRIS }
-import from game.aim { LONG_BLAST_R, LONG_BLAST_DMG, LONG_BLAST_PUSH, long_pointer }
-import from game.longrange { LONG_CRATER_R, build_long, generate_long }
+import from game.aim { LONG_BLAST_R, LONG_BLAST_DMG, LONG_BLAST_PUSH, long_pointer, release_long }
+import from game.longrange { LONG_CRATER_R, build_long, generate_long, fire_long }
 import from server.live { boot_match, claim_player, take_shot, watch, _craters_for }
 
 glob SECRET: str = "destruction-test-secret";
@@ -240,15 +240,19 @@ test "carving and a long shot stay inside the phone budget" {
     mean = sum(world.carve_ms) / float(len(world.carve_ms));
     layout = generate_long(4242, SECRET);
     assert len(layout) > 0;
+    # The generator's own proof shot for A: a real kill with fractures, craters and debris.
     live_world = build_long(layout, True);
-    spot = layout["launcher_a"];
+    pointer = layout["proof"]["A"];
+    aim = release_long("A", float(pointer[0]), float(pointer[1]), 800.0, 400.0, 1.0, True, False, False);
+    assert aim.fired;
     started = time.perf_counter();
-    live_world.add_projectile("shot", float(spot[0]), float(spot[1]), 30.0, 18.0, 0.3);
-    live_world.simulate(max_steps=1800);
+    fire_long(live_world, layout, "A", aim.angle, aim.power, True);
     shot_ms = (time.perf_counter() - started) * 1000.0;
+    debris = len([t for t in live_world.tracks if t.role == "debris" and not t.broken]);
     with open("/tmp/fogshot-destruction-perf.json", "w") as out {
         out.write(json.dumps({"carve_mean_ms": round(mean, 2), "carve_worst_ms": round(worst, 2), "shot_ms": round(shot_ms, 1),
-            "steps": live_world.step_index, "crater_count": len(live_world.craters())}));
+            "steps": live_world.step_index, "step_us": round(shot_ms * 1000.0 / max(1, live_world.step_index), 1),
+            "crater_count": len(live_world.craters()), "debris": debris, "bodies": len(live_world.space.bodies)}));
     }
     assert mean < 40.0;
     assert worst < 120.0;

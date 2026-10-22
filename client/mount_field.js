@@ -1051,6 +1051,8 @@ export function mountField(parent) {
                 });
             },
             update(time, delta) {
+                // Frame-rate readout for QA (once a second, no layout cost).
+                if (!this.fpsAt || time - this.fpsAt > 1000) { this.fpsAt = time; parent.dataset.fps = String(Math.round(this.game.loop.actualFps)); }
                 animate(this, time, delta);
                 if (isLong()) steerCamera(this, time, delta);
                 const path = this.path;
