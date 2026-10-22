@@ -55,7 +55,8 @@ for (const vp of [{name: "desktop", width: 1280, height: 800, touch: false}, {na
   for (let i = 0; i < 4; i++) await page.locator("[data-aim='angle-up']").click();
   await shot(page, vp, "2-aim", run);
   for (const weapon of ["flare", "shell"]) {
-    await until(page, () => { const d = document.getElementById("fogshot-field").dataset; return d.yourTurn === "true" && d.camera === "home" && d.botThinking !== "true"; }, null, 60000);
+    await until(page, () => { const d = document.getElementById("fogshot-field").dataset; return (d.yourTurn === "true" || d.phase === "finished") && d.camera === "home" && d.botThinking !== "true"; }, null, 60000);
+    if ((await ds(page)).phase === "finished") break;
     const fired = page.waitForResponse(r => r.request().method() === "POST" && r.url().includes("/function/loose_shot"));
     await page.locator("#fogshot-fire").click();
     const receipt = JSON.parse((await (await fired).json()).data.result);
@@ -70,19 +71,23 @@ for (const vp of [{name: "desktop", width: 1280, height: 800, touch: false}, {na
       await until(page, () => document.getElementById("fogshot-field").dataset.camera === "impact", null, 12000).catch(() => {});
       await page.waitForTimeout(250);
       await shot(page, vp, "5-burst-reveal", run);
-      // The bot answers; the camera follows its incoming shell.
-      await until(page, () => document.getElementById("fogshot-field").dataset.yourTurn === "false", null, 8000).catch(() => {});
-      await until(page, () => { const d = document.getElementById("fogshot-field").dataset; return d.camera === "follow" && d.yourTurn !== "true"; }, null, 40000).catch(() => {});
-      await page.waitForTimeout(900);
+      // The camera goes home, then the bot answers and the camera follows its incoming shell
+      // (the defender only sees the part of the flight over its own half).
+      await until(page, () => document.getElementById("fogshot-field").dataset.camera === "home", null, 8000).catch(() => {});
+      await until(page, () => document.getElementById("fogshot-field").dataset.camera === "follow", null, 40000).catch(() => {});
+      await page.waitForTimeout(350);
       await shot(page, vp, "6-incoming", run);
     } else {
       await until(page, () => document.getElementById("fogshot-field").dataset.camera === "follow", null, 6000);
       await page.waitForTimeout(1300);
       await shot(page, vp, "9-shell-flight", run);
     }
+    // Let the exchange finish: our burst, home, the bot's incoming shell, home again, banner gone.
+    await until(page, () => document.getElementById("fogshot-field").dataset.camera === "home", null, 12000).catch(() => {});
+    if (weapon === "shell") await until(page, () => document.getElementById("fogshot-field").dataset.camera === "follow", null, 40000).catch(() => {});
+    await until(page, () => { const d = document.getElementById("fogshot-field").dataset; return (d.yourTurn === "true" || d.phase === "finished") && d.camera === "home" && d.botThinking !== "true"; }, null, 60000).catch(() => {});
+    await page.waitForTimeout(2800);
   }
-  await until(page, () => { const d = document.getElementById("fogshot-field").dataset; return (d.yourTurn === "true" || d.phase === "finished") && d.camera === "home" && d.botThinking !== "true"; }, null, 60000).catch(() => {});
-  await page.waitForTimeout(800);
   // Minimap: tap the far end of the strip to look at the enemy side.
   const b = await page.locator("#fogshot-field canvas").boundingBox();
   const sx = b.x + b.width * .7, sy = b.y + b.height * (22 / 400);
