@@ -172,8 +172,9 @@ class TerrainMask:
 
     def carve(self, cx, cy, r):
         """Remove a disc; returns the sorted chunk indices whose collision must be rebuilt."""
-        cx, cy, r = float(cx), float(cy), float(r)
-        self.craters.append((round(cx, 4), round(cy, 4), round(r, 4)))
+        # Rounded first, so a rewind from the saved marks rebuilds exactly the same ground.
+        cx, cy, r = round(float(cx), 4), round(float(cy), 4), round(float(r), 4)
+        self.craters.append((cx, cy, r))
         return self._apply(cx, cy, r)
 
     def _apply(self, cx, cy, r):
@@ -457,6 +458,8 @@ obj Tracked {
     has h: float = 0.0;
     has density: float = 0.0;
     has parent: str = "";
+    # Step a fragment was made on: the blast that broke its block does not also pulverise it.
+    has born: int = -1;
 }
 
 def _post_solve(arbiter: any, _space: any, data: any) -> None {
@@ -734,6 +737,11 @@ obj PhysicsWorld {
         if not projectile and mag < CRUSH_MIN and self._debris_only(a, b) {
             return;
         }
+        if not projectile and self._rubble(a, b) {
+            # Fragments landing on the ground or on each other just settle; only a blast or
+            # a crush against a real block wears them down.
+            return;
+        }
         self.damaged.append(key);
         self.pending.append((a, b, mag));
     }
@@ -758,6 +766,14 @@ obj PhysicsWorld {
             return False;
         }
         return True;
+    }
+
+    def _rubble(a: str, b: str) -> bool {
+        left = self.find(a);
+        right = self.find(b);
+        loose_left = left is None or left.role == "debris";
+        loose_right = right is None or right.role == "debris";
+        return loose_left and loose_right and (left is not None or right is not None);
     }
 
     def find(body_id: str) -> Tracked | None {
@@ -857,7 +873,7 @@ obj PhysicsWorld {
             mass = max(0.02, track.density * piece[2] * piece[3]);
             made = _fragment(self.space, track.body, piece[0], piece[1], piece[2], piece[3], mass, fid) as tuple[any, any];
             self.tracks.append(Tracked(id=fid, role="debris", body=made[0], shape=made[1],
-                health=DEBRIS_HEALTH.get(material, 0.3), w=piece[2], h=piece[3], density=track.density, parent=track.id));
+                health=DEBRIS_HEALTH.get(material, 0.3), w=piece[2], h=piece[3], density=track.density, parent=track.id, born=self.step_index));
             self.debris_specs.append({"id": fid, "parent": track.id, "material": material, "w": piece[2], "h": piece[3], "mass": mass});
         }
         self._cap_debris();
@@ -1013,7 +1029,9 @@ obj PhysicsWorld {
                 continue;
             }
             share = 1.0 - gap / self.blast_radius;
-            hits.append((track.id, self.blast_damage * share));
+            if not (track.role == "debris" and track.born == self.step_index) {
+                hits.append((track.id, self.blast_damage * share));
+            }
             if track.kind == "dynamic" {
                 _push(track.body, self.blast_x, self.blast_y, self.blast_push * share);
             }

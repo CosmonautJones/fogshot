@@ -322,3 +322,49 @@ export function rangeMarks(seat, launcherX, field, every = 20) {
     }
     return marks;
 }
+
+// ---------- destructible ground ----------
+// The server's ground is a density grid carved by circles (pymunk.autogeometry); the client
+// redraws the same surface as a height profile: a crater lowers every column it covers to the
+// circle's lower arc. Columns within `pad` m of your own launcher are never carved (the server
+// reinforces both launcher pads). Pure: the same terrain and craters always give the same points.
+export const CRATER_STEP = .25;
+export function carveTerrain(terrain, craters, pads = [], pad = 2.5, step = CRATER_STEP) {
+    if (!Array.isArray(terrain) || terrain.length < 2) return [];
+    const marks = Array.isArray(craters) ? craters.filter(c => Array.isArray(c) && c.length >= 3 && c.every(Number.isFinite) && c[2] > 0) : [];
+    if (!marks.length) return terrain.map(([x, y]) => [x, y]);
+    const xs = new Set(terrain.map(p => p[0]));
+    const lo = terrain[0][0], hi = terrain[terrain.length - 1][0];
+    for (const [cx, , r] of marks) {
+        for (let x = Math.ceil((cx - r) / step) * step; x <= cx + r + 1e-9; x += step) if (x >= lo && x <= hi) xs.add(Math.round(x * 1e4) / 1e4);
+        for (const edge of [cx - r, cx + r]) if (edge >= lo && edge <= hi) xs.add(Math.round(edge * 1e4) / 1e4);
+    }
+    const sorted = [...xs].sort((a, b) => a - b);
+    let seg = 1;
+    return sorted.map(x => {
+        while (seg < terrain.length - 1 && terrain[seg][0] < x) seg++;
+        const [x0, y0] = terrain[seg - 1], [x1, y1] = terrain[seg];
+        let y = x1 === x0 ? y1 : y0 + (y1 - y0) * (x - x0) / (x1 - x0);
+        if (pads.some(p => Math.abs(x - p) <= pad)) return [x, y];
+        let dug = false;
+        for (const [cx, cy, r] of marks) {
+            const dx = x - cx;
+            if (Math.abs(dx) >= r) continue;
+            const s = Math.sqrt(r * r - dx * dx);
+            // The burst sits on the surface; a cave under an overhang is drawn as an open bowl.
+            if (y > cy - s && y <= cy + s + .5) { y = cy - s; dug = true; }
+        }
+        return [x, dug ? Math.round(y * 1e4) / 1e4 : y];
+    });
+}
+
+// Crater floors as screen polylines (for the scorched rim), clipped to carved columns.
+export function craterRims(terrain, craters, pads = [], pad = 2.5, height = 16) {
+    const carved = carveTerrain(terrain, craters, pads, pad);
+    const rims = [];
+    for (const [cx, , r] of Array.isArray(craters) ? craters : []) {
+        const span = carved.filter(([x]) => x >= cx - r && x <= cx + r && !pads.some(p => Math.abs(x - p) <= pad));
+        if (span.length >= 2) rims.push(span.map(([x, y]) => ({ x: x * 20, y: (height - y) * 25 })));
+    }
+    return rims;
+}

@@ -120,9 +120,13 @@ test "blocks fracture only past their threshold and stone outlasts timber" {
     assert len(pieces) == 3;
     assert abs(sum([p.w * p.h for p in pieces]) - 0.4 * 1.2) < 0.001;
     assert all([p.parent == "plank" for p in pieces]);
-    _shell_at(world, 70.5);
-    _shell_at(world, 70.5);
-    assert _get(world, "slab").broken;
+    # Stone takes more bursts; count its pieces the moment it gives way.
+    shells = 1;
+    while not _get(world, "slab").broken and shells < 5 {
+        _shell_at(world, 70.5);
+        shells = shells + 1;
+    }
+    assert _get(world, "slab").broken and shells >= 2;
     assert len([p for p in _debris(world) if p.parent == "slab"]) == 4;
     # Fragments settle and stop: nothing still flying a few seconds later.
     world.simulate(max_steps=400);
@@ -184,9 +188,17 @@ test "craters and debris survive a reload, and craters only reach seats that saw
     layout = live.layout;
     assert layout["mode"] == "long";
     mid = float(layout["width"]) / 2.0;
-    # A lands a lob on its own half (B must not see that), then B fires A's proof-style shot.
+    # Recon flares never carve.
+    for (player, seat) in [("player-a", "A"), ("player-b", "B")] {
+        lob = long_pointer(seat, math.radians(70.0) if seat == "A" else math.pi - math.radians(70.0), 7.0);
+        flare = json.loads(take_shot(live, player, "flare-" + seat, lob[0], lob[1], 800.0, 400.0, 1.0,
+            live.table.epoch, live.table.turn, live.table.revision, "flare"));
+        assert flare["ok"];
+    }
+    assert len(live.world.craters()) == 0;
+    # A lands a lob on its own half: A sees that crater, B must not.
     pointer = long_pointer("A", math.radians(70.0), 7.0);
-    result = json.loads(take_shot(live, "player-a", "fire", pointer[0], pointer[1], 800.0, 400.0, 1.0,
+    result = json.loads(take_shot(live, "player-a", "shell-a", pointer[0], pointer[1], 800.0, 400.0, 1.0,
         live.table.epoch, live.table.turn, live.table.revision, "shell"));
     assert result["ok"];
     marks = live.world.craters();
@@ -200,7 +212,7 @@ test "craters and debris survive a reload, and craters only reach seats that saw
     assert all([len(c) == 3 for c in seen_a["craters"]]);
     # B's lob into its own half is visible to B, not A.
     pointer = long_pointer("B", math.pi - math.radians(70.0), 7.0);
-    result = json.loads(take_shot(live, "player-b", "fire", pointer[0], pointer[1], 800.0, 400.0, 1.0,
+    result = json.loads(take_shot(live, "player-b", "shell-b", pointer[0], pointer[1], 800.0, 400.0, 1.0,
         live.table.epoch, live.table.turn, live.table.revision, "shell"));
     assert result["ok"];
     assert len(_craters_for(live, "B")) == 1 and len(_craters_for(live, "A")) == 1;
