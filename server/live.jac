@@ -711,6 +711,17 @@ def _apply_hit(live: LiveMatch, outcome: SimOutcome, weapon: str) -> None {
 }
 
 def _reveal_on(live: LiveMatch, outcome: SimOutcome, seat: str, now_ms: int, weapon: str) -> None {
+    if _long(live) and live.world.impact_step < 0 {
+        # A long shell that sails off the field still plays back for the shooter, with nothing revealed.
+        trail = live.world.trace;
+        flight_s = trail[len(trail) - 1] if len(trail) >= 3 else 0.0;
+        live.reveal_seat = seat;
+        live.reveal_x = trail[len(trail) - 3] if len(trail) >= 3 else 0.0;
+        live.reveal_y = -50.0;
+        live.reveal_radius = 0.0;
+        live.reveal_until = server_now() + int(min(flight_s, 6.0) * 1000.0 / 1.6) + 1500;
+        return;
+    }
     if live.world.strike_step >= 0 {
         live.reveal_x = live.world.strike_x;
         live.reveal_y = live.world.strike_y;
@@ -778,7 +789,11 @@ def _bound(points: list[list[float]], limit: int) -> list[list[float]] {
 def _path_of(live: LiveMatch) -> list[list[float]] {
     points: list[list[float]] = [];
     index = 0;
+    span = _field_width(live);
     while index + 2 < len(live.world.trace) {
+        if _long(live) and (live.world.trace[index] < -2.0 or live.world.trace[index] > span + 2.0 or live.world.trace[index + 1] < -2.0) {
+            break;
+        }
         points.append([
             live.world.trace[index],
             live.world.trace[index + 1],

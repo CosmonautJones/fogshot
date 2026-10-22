@@ -4,14 +4,18 @@
 // not integrate a shot or decide a hit.
 import { AUTO, Game, Scale } from "phaser";
 import "../assets/field.css";
-import { bodySize, pullFeedback, hudState, protocolPull, observationAt, trianglePoints, headingOf, easeOutBack, easeOutCubic, burst, stepShards, bannerFor, recordAfter, recordLabel, ridgeLines, terrainPolygon, ridgeLabel } from "./presentation.js";
+import { bodySize, pullFeedback, hudState, protocolPull, observationAt, trianglePoints, headingOf, easeOutBack, easeOutCubic, burst, stepShards, bannerFor, recordAfter, recordLabel, ridgeLines, terrainPolygon, ridgeLabel, CLASSIC_FIELD, fieldOf, fieldPixels, toScreen, dragPull, padFromAim, longAim, previewArc, clampScroll, cameraHome, cameraOn, overviewRect, overviewToWorld, rangeMarks, LONG_FLOOR } from "./presentation.js";
 import { isStale, releaseAllowed, sampleAt, stepWatch } from "./playback.js";
 
-const ARENA_W = 40;
-const ARENA_H = 16;
 const VIEW_W = 800;
 const VIEW_H = 400;
 const PULL_HELP = "Drag back and release. Keyboard: Tab to field, arrows aim, Enter fires, Escape cancels.";
+const LONG_HELP = "Drag anywhere on the field to aim (pull back and down), release to set it, then FIRE or Enter. Up/Down angle, Left/Right power. Minimap or drag to look around.";
+const VIEW = { w: 800, h: 400 };
+const PLAY_RATE_LONG = 1.6;
+// The public field the server described: classic 40 x 16 m, or a 160 m long-range ridge.
+let FIELD = CLASSIC_FIELD;
+const isLong = () => FIELD.mode === "long";
 const RECORD_KEY = "fogshot-record";
 const MAX_SHARDS = 220;
 
@@ -80,13 +84,21 @@ function animate(scene, time, delta) {
     const dt = Math.min(.05, (delta || 16) / 1000);
     const t = time / 1000;
     fx.clear();
+    const hud = scene.hudPen;
+    if (hud) hud.clear();
     // Sine-drifting fog wisps over the hidden half (mirrored for seat B).
     if (scene.wisps) {
         const flip = scene.seat === "B";
+        const world = fieldPixels(FIELD);
         scene.wisps.forEach((wisp, i) => {
             const drift = scene.reducedMotion ? 0 : Math.sin(t * wisp.speed + wisp.phase) * wisp.amp;
-            const x = wisp.baseX + drift;
-            wisp.image.setPosition(flip ? VIEW_W - x : x, wisp.baseY + (scene.reducedMotion ? 0 : Math.sin(t * wisp.speed * 1.7 + i) * 4));
+            // Long fields: the wisps drift over the enemy half of the world, low over its ground.
+            const baseX = isLong() ? world.w / 2 + 260 + i * (world.w / 2 - 520) / Math.max(1, scene.wisps.length - 1) : wisp.baseX;
+            const baseY = isLong() ? world.h - 110 - (i % 2) * 120 - wisp.baseY * .2 : wisp.baseY;
+            const x = baseX + drift;
+            const span = isLong() ? world.w : VIEW_W;
+            wisp.image.setScale(isLong() ? 1.7 : 1);
+            wisp.image.setPosition(flip ? span - x : x, baseY + (scene.reducedMotion ? 0 : Math.sin(t * wisp.speed * 1.7 + i) * 4));
             wisp.image.setAlpha(scene.reducedMotion ? wisp.alpha : wisp.alpha * (.75 + .25 * Math.sin(t * .6 + wisp.phase)));
         });
     }
@@ -125,17 +137,26 @@ function animate(scene, time, delta) {
     }
     // Aim chevrons: triangles rotated to the launch angle, pulsing outward with a sine wave.
     const pull = scene.activePull;
-    if (pull) {
-        const aim = pullFeedback(scene.seat, pull, launcherWorld(scene));
+    const shown = isLong() && !finished ? currentAim(scene, pull) : pull ? currentAim(scene, pull) : null;
+    if (shown && !(isLong() && scene.shot && !scene.landed)) {
+        const aim = shown;
         const heading = -aim.angle; // world y-up angle -> screen y-down angle
-        const color = aim.valid ? 0xf1d18b : 0xb98472;
+        const color = aim.valid ? (aim.locked ? 0xa9d6c2 : 0xf1d18b) : 0xb98472;
+        if (isLong() && aim.valid && aim.guide.length) {
+            // Partial trajectory: the first half second of the arc as a dotted line, then chevrons.
+            fx.lineStyle(1.5, color, .35);
+            fx.beginPath(); fx.moveTo(launch.x, launch.y);
+            aim.guide.forEach(p => fx.lineTo(p.x, p.y));
+            fx.strokePath();
+        }
         aim.guide.forEach((point, n) => {
             const wave = scene.reducedMotion ? .6 : .5 + .5 * Math.sin(t * 9 - n * .9);
-            const [a, b, c] = trianglePoints(point.x, point.y, 2.6 + wave * 1.6 + aim.pullFraction * 1.2, heading);
-            fx.fillStyle(color, .45 + .55 * wave); fx.fillTriangle(a.x, a.y, b.x, b.y, c.x, c.y);
+            const fade = isLong() ? 1 - n / (aim.guide.length + 1) : 1;
+            const [a, b, c] = trianglePoints(point.x, point.y, 2.6 + wave * 1.6 + aim.pullFraction * 1.2, point.heading ?? heading);
+            fx.fillStyle(color, (.45 + .55 * wave) * fade); fx.fillTriangle(a.x, a.y, b.x, b.y, c.x, c.y);
         });
-        const pct = Math.round(aim.pullFraction * 100);
-        const degrees = Math.round(aim.angle * 180 / Math.PI);
+        const pct = isLong() ? (aim.pullFraction * 100).toFixed(1) : Math.round(aim.pullFraction * 100);
+        const degrees = isLong() ? (aim.angle * 180 / Math.PI > 90 ? 180 - aim.angle * 180 / Math.PI : aim.angle * 180 / Math.PI).toFixed(1) : Math.round(aim.angle * 180 / Math.PI);
         scene.aimLabel.setVisible(true).setFontSize(Math.round(10 * uiScale(scene)))
             .setText(aim.valid ? `${pct}%  ${degrees}°` : "AIM FORWARD")
             .setColor(aim.valid ? "#f1d18b" : "#e0a08e")
@@ -192,28 +213,93 @@ function animate(scene, time, delta) {
             scene.bannerSub.setVisible(true).setAlpha(alpha).setPosition(VIEW_W / 2, y + scene.bannerTitle.displayHeight / 2 + scene.bannerSub.height / 2 + 4);
             const w = Math.max(scene.bannerTitle.displayWidth, scene.bannerSub.width) + 48;
             const h = scene.bannerTitle.displayHeight + scene.bannerSub.height + 22;
-            fx.fillStyle(0x081a22, .72 * alpha);
-            fx.fillRoundedRect(VIEW_W / 2 - w / 2, y - scene.bannerTitle.displayHeight / 2 - 9, w, h, 8);
+            hud.fillStyle(0x081a22, .72 * alpha);
+            hud.fillRoundedRect(VIEW_W / 2 - w / 2, y - scene.bannerTitle.displayHeight / 2 - 9, w, h, 8);
             const edge = banner.kind === "defeat" ? 0xf0a48a : banner.kind === "victory" ? 0xf4d58f : 0x8fc5b6;
-            fx.lineStyle(1, edge, .6 * alpha);
-            fx.strokeRoundedRect(VIEW_W / 2 - w / 2, y - scene.bannerTitle.displayHeight / 2 - 9, w, h, 8);
+            hud.lineStyle(1, edge, .6 * alpha);
+            hud.strokeRoundedRect(VIEW_W / 2 - w / 2, y - scene.bannerTitle.displayHeight / 2 - 9, w, h, 8);
             if (banner.persistent && !scene.reducedMotion) {
                 // Slow rotating triangle crest on either side of the result.
                 for (const side of [-1, 1]) {
                     const cx = VIEW_W / 2 + side * (w / 2 + 18), spin = t * 1.2 * side;
                     const [a, b, c] = trianglePoints(cx, y, 9, spin);
-                    fx.lineStyle(1.5, edge, .8 * alpha); fx.strokeTriangle(a.x, a.y, b.x, b.y, c.x, c.y);
+                    hud.lineStyle(1.5, edge, .8 * alpha); hud.strokeTriangle(a.x, a.y, b.x, b.y, c.x, c.y);
                 }
             }
         }
     }
+    if (isLong() && hud) drawOverview(scene, hud, t);
+}
+
+// Minimap strip pinned to the top of the screen: the whole public ridge, both launchers,
+// your outpost, the shell in flight, the open reveal and the camera window. Tap or drag it to look.
+function drawOverview(scene, hud, t) {
+    const world = fieldPixels(FIELD);
+    const strip = overviewRect(VIEW, uiScale(scene));
+    scene.strip = strip;
+    const sx = x => strip.x + x / world.w * strip.w;
+    const top = 18; // metres of terrain shown in the strip
+    const sy = y => strip.y + strip.h - Math.max(0, Math.min(top, y)) / top * (strip.h - 4);
+    hud.fillStyle(0x081a22, .78); hud.fillRoundedRect(strip.x - 4, strip.y - 3, strip.w + 8, strip.h + 6, 5);
+    hud.lineStyle(1, 0x5f8a83, .7); hud.strokeRoundedRect(strip.x - 4, strip.y - 3, strip.w + 8, strip.h + 6, 5);
+    const terrain = scene.terrain;
+    if (Array.isArray(terrain) && terrain.length > 1) {
+        hud.fillStyle(0x2c5058, 1);
+        hud.beginPath(); hud.moveTo(sx(Math.max(0, terrain[0][0]) * 20), strip.y + strip.h);
+        for (const [x, y] of terrain) if (x >= 0 && x <= FIELD.w) hud.lineTo(sx(x * 20), sy(y));
+        hud.lineTo(sx(world.w), strip.y + strip.h); hud.closePath(); hud.fillPath();
+    }
+    // The enemy half is fogged on the map too.
+    const enemyLeft = scene.seat === "B" ? strip.x : strip.x + strip.w / 2;
+    hud.fillStyle(0x091d28, .45); hud.fillRect(enemyLeft, strip.y, strip.w / 2, strip.h);
+    const own = launcherWorld(scene);
+    const foe = { x: FIELD.w - own.x, y: own.y };
+    hud.fillStyle(0xf1d18b, 1); hud.fillTriangle(sx(own.x * 20) - 4, sy(own.y) + 3, sx(own.x * 20) + 4, sy(own.y) + 3, sx(own.x * 20), sy(own.y) - 5);
+    hud.fillStyle(0xe0a08e, .85); hud.fillTriangle(sx(foe.x * 20) - 4, sy(foe.y) + 3, sx(foe.x * 20) + 4, sy(foe.y) + 3, sx(foe.x * 20), sy(foe.y) - 5);
+    const core = ownBodies(scene.view).find(body => body.role === "core");
+    if (core) { hud.fillStyle(core.alive === false ? 0x6b7973 : 0x8fc5b6, 1); hud.fillRect(sx(core.x * 20) - 2, sy(core.y) - 2, 4, 4); }
+    if (scene.reveal) { hud.lineStyle(1.5, 0xf0d095, .9); hud.strokeCircle(sx(scene.reveal.x * 20), sy(scene.reveal.y), 4 + Math.sin(t * 6) * 1); }
+    if (scene.shot && !scene.landed) { hud.fillStyle(0xfff3d4, 1); hud.fillCircle(sx(scene.shot.x), Math.max(strip.y + 2, sy(FIELD.h - scene.shot.y / 25)), 2.5); }
+    const cam = scene.cameras.main;
+    hud.lineStyle(1.5, 0xdfeadf, .8);
+    hud.strokeRect(sx(cam.scrollX), strip.y - 1, VIEW.w / world.w * strip.w, strip.h + 2);
+}
+
+// Long-range camera: follow the shell, hold on the burst, then return home (or stay where you looked).
+function steerCamera(scene, time, delta) {
+    const cam = scene.cameras.main;
+    const world = fieldPixels(FIELD);
+    const parent = scene.fieldParent;
+    let mode = "home";
+    let target = null;
+    if (scene.panDrag || scene.stripDrag) {
+        mode = "look";
+    } else if (scene.shot && !scene.landed) {
+        mode = "follow";
+        target = cameraOn(scene.shot, VIEW, world);
+    } else if (scene.landedAt !== null && time - scene.landedAt < 1400 && scene.landPoint) {
+        mode = "impact";
+        target = cameraOn({ x: scene.landPoint.x, y: scene.landPoint.y - 70 }, VIEW, world);
+    } else if (scene.lookAt) {
+        mode = "look";
+        target = cameraOn(scene.lookAt, VIEW, world);
+    } else {
+        target = cameraHome(scene.seat, launcherOf(scene), VIEW, world);
+    }
+    if (target) {
+        const k = scene.reducedMotion || scene.snapCamera ? 1 : 1 - Math.exp(-(delta || 16) / 1000 * (mode === "follow" ? 8 : 4.5));
+        scene.snapCamera = false;
+        cam.setScroll(cam.scrollX + (target.x - cam.scrollX) * k, cam.scrollY + (target.y - cam.scrollY) * k);
+    }
+    if (parent) {
+        if (parent.dataset.camera !== mode) parent.dataset.camera = mode;
+        parent.dataset.cameraX = String(Math.round(cam.scrollX));
+        parent.dataset.cameraY = String(Math.round(cam.scrollY));
+    }
 }
 
 function worldToScreen(x, y) {
-    return {
-        x: (x / ARENA_W) * VIEW_W,
-        y: (1 - y / ARENA_H) * VIEW_H,
-    };
+    return toScreen(FIELD, x, y);
 }
 
 function ownBodies(view) {
@@ -236,7 +322,7 @@ function drawBodies(pen, bodies, friendly, scene) {
         // Shattered blocks are gone from the world; do not leave a grey ghost.
         if (body.alive === false && ["timber", "stone", "spur"].includes(body.role)) continue;
         const center = worldToScreen(body.x, body.y);
-        if (center.x < -40 || center.x > VIEW_W + 40) continue;
+        if (center.x < -40 || center.x > fieldPixels(FIELD).w + 40) continue;
         const { width, height } = bodySize(body);
         if (!width || !height) continue;
         const falling = body.role === "post" && scene.collapseId === body.id && typeof scene.collapseAngle === "number";
@@ -297,17 +383,18 @@ function groundScreenY(terrain, x) {
         if (wx <= x1) {
             const t = x1 === x0 ? 0 : Math.min(1, Math.max(0, (wx - x0) / (x1 - x0)));
             const gy = y0 + (y1 - y0) * t;
+            if (isLong()) return (FIELD.h - gy) * 25;
             return gy <= 0.001 ? 397 : (1 - gy / 16) * 400;
         }
     }
-    return 397;
+    return isLong() ? FIELD.h * 25 : 397;
 }
 
 function launcherWorld(scene) {
     for (const body of ownBodies(scene.view)) {
         if (body.role === "launcher") return { x: body.x, y: body.y };
     }
-    return { x: scene.seat === "B" ? 34 : 6, y: 4 };
+    return { x: scene.seat === "B" ? FIELD.w - 6 : 6, y: 4 };
 }
 
 function launcherOf(scene) {
@@ -319,23 +406,32 @@ function launcherOf(scene) {
 function paintLand(scene, data) {
     const pen = scene.landPen;
     if (!pen) return;
-    const key = `${data.ridge ?? 0}:${data.epoch ?? 0}`;
+    const key = `${data.ridge ?? 0}:${data.epoch ?? 0}:${FIELD.mode}:${scene.seat || ""}`;
     if (scene.landKey === key) return;
     scene.landKey = key;
     pen.clear();
-    const lines = ridgeLines(Number(data.ridge || 0));
+    const far = scene.farPen;
+    if (far) far.clear();
+    const world = fieldPixels(FIELD);
+    // Long fields: distant ridgelines on a slow parallax layer, sized to cover the camera's travel.
+    const parallax = .25;
+    const farPen = isLong() && far ? far : pen;
+    const farWidth = isLong() ? VIEW_W + (world.w - VIEW_W) * parallax : VIEW_W;
+    const lift = isLong() ? (world.h - VIEW_H) * parallax : 0;
+    const lines = ridgeLines(Number(data.ridge || 0), 3, 16, farWidth);
     const tones = [0x2e5360, 0x264753, 0x1f3d48];
     lines.forEach((points, i) => {
-        pen.fillStyle(tones[i % tones.length], .6 + i * .12);
-        pen.beginPath(); pen.moveTo(0, 400);
-        for (const p of points) pen.lineTo(p.x, p.y);
-        pen.lineTo(800, 400); pen.closePath(); pen.fillPath();
-        pen.lineStyle(1.2, 0x9fbfb2, .14 + i * .05);
-        pen.beginPath(); pen.moveTo(points[0].x, points[0].y);
-        for (const p of points) pen.lineTo(p.x, p.y);
-        pen.strokePath();
+        farPen.fillStyle(tones[i % tones.length], .6 + i * .12);
+        farPen.beginPath(); farPen.moveTo(0, 400 + lift);
+        for (const p of points) farPen.lineTo(p.x, p.y + lift);
+        farPen.lineTo(farWidth, 400 + lift); farPen.closePath(); farPen.fillPath();
+        farPen.lineStyle(1.2, 0x9fbfb2, .14 + i * .05);
+        farPen.beginPath(); farPen.moveTo(points[0].x, points[0].y + lift);
+        for (const p of points) farPen.lineTo(p.x, p.y + lift);
+        farPen.strokePath();
     });
-    const ground = terrainPolygon(data.terrain);
+    for (const label of scene.rangeLabels || []) label.setVisible(false);
+    const ground = terrainPolygon(data.terrain, FIELD.h, isLong() ? LONG_FLOOR : 0);
     if (ground.length && Number(data.ridge || 0) > 0) {
         pen.fillStyle(0x16303a, 1);
         pen.beginPath(); pen.moveTo(ground[0].x, ground[0].y);
@@ -352,6 +448,30 @@ function paintLand(scene, data) {
         pen.beginPath(); pen.moveTo(ground[0].x, ground[0].y);
         for (const p of ground.slice(0, -2)) pen.lineTo(p.x, p.y);
         pen.strokePath();
+    }
+    const crest = scene.crestPen;
+    if (crest) crest.clear();
+    if (crest && isLong() && ground.length) {
+        crest.lineStyle(2, 0x82a99a, .35);
+        crest.beginPath(); crest.moveTo(ground[0].x, ground[0].y);
+        for (const p of ground.slice(0, -2)) crest.lineTo(p.x, p.y);
+        crest.strokePath();
+    }
+    if (isLong() && Array.isArray(data.terrain)) {
+        // Range marks from your launcher: read distance, then pick angle and power.
+        const spot = launcherWorld(scene);
+        const marks = rangeMarks(scene.seat, spot.x, FIELD);
+        marks.slice(0, (scene.rangeLabels || []).length).forEach((mark, i) => {
+            const at = worldToScreen(mark.x, 0);
+            const gy = groundScreenY(data.terrain, at.x);
+            pen.lineStyle(2, 0xb8d6c6, .35);
+            pen.lineBetween(at.x, gy - 12, at.x, gy + 2);
+            scene.rangeLabels[i].setText(mark.label).setFontSize(Math.round(10 * Math.min(1.8, uiScale(scene)))).setPosition(at.x, gy - 16 - 12 * Math.min(1.8, uiScale(scene))).setAlpha(.75).setVisible(true);
+        });
+        // The midline: no man's land starts here.
+        const mid = worldToScreen(FIELD.w / 2, 0);
+        const my = groundScreenY(data.terrain, mid.x);
+        for (let y = my - 200; y < my; y += 14) { pen.lineStyle(1, 0xe2d4a8, .18); pen.lineBetween(mid.x, y, mid.x, y + 7); }
     }
 }
 
@@ -379,8 +499,9 @@ function drawLauncher(pen, scene, pull) {
     pen.lineBetween(launch.x - 13, launch.y + 23, launch.x - 8, launch.y - 10);
     pen.lineBetween(launch.x + 13, launch.y + 23, launch.x + 8, launch.y - 10);
     pen.lineStyle(2, 0xd8c48b, 1);
-    const aim = pull ? pullFeedback(scene.seat, pull, launcherWorld(scene)) : null;
-    const pouch = pull ? { x: launch.x - Math.cos(aim.angle) * Math.min(30, aim.power * 4), y: launch.y + Math.sin(aim.angle) * Math.min(30, aim.power * 4) } : launch;
+    const aim = currentAim(scene, pull);
+    const tug = aim ? (isLong() ? aim.pullFraction * 30 : Math.min(30, aim.power * 4)) : 0;
+    const pouch = aim ? { x: launch.x - Math.cos(aim.angle) * tug, y: launch.y + Math.sin(aim.angle) * tug } : launch;
     pen.lineBetween(launch.x - 8, launch.y - 10, pouch.x, pouch.y);
     pen.lineBetween(launch.x + 8, launch.y - 10, pouch.x, pouch.y);
     pen.fillStyle(0x101e27, 1); pen.fillCircle(pouch.x, pouch.y, 7);
@@ -393,6 +514,18 @@ function drawLauncher(pen, scene, pull) {
         pen.lineStyle(2, aim.valid ? 0xf1d18b : 0xb98472, .9);
         pen.beginPath(); pen.arc(launch.x, launch.y, 29, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * aim.pullFraction); pen.strokePath();
     }
+}
+
+// Aim feedback in one shape for both modes. Long range: `pull` is the pad pull while dragging;
+// otherwise the locked aim is shown on your turn.
+function currentAim(scene, pull) {
+    if (!isLong()) return pull ? pullFeedback(scene.seat, pull, launcherWorld(scene)) : null;
+    const padPull = pull || (scene.yourTurn ? scene.lockedPull : null);
+    if (!padPull) return null;
+    const aim = longAim(scene.seat, padPull, FIELD);
+    const spot = launcherWorld(scene);
+    const guide = previewArc(aim, spot, FIELD).map(p => ({ ...worldToScreen(p.x, p.y), heading: -p.heading }));
+    return { ...aim, pullFraction: aim.fraction, guide, locked: !pull };
 }
 
 function expireObservation(scene) {
@@ -417,6 +550,18 @@ function paint(scene, pull) {
     if (!pen) return;
     pen.clear();
     scene.fogBank.setFlipX(scene.seat === "B");
+    scene.fogBank.setVisible(!isLong());
+    scene.fogEdge.setVisible(isLong());
+    scene.fogVeil.setVisible(isLong());
+    if (isLong()) {
+        const world = fieldPixels(FIELD);
+        const mid = world.w / 2;
+        const flip = scene.seat === "B";
+        // The edge ramps in over 15 m from the midline, then an even veil to the far end.
+        scene.fogEdge.setFlipX(flip).setDisplaySize(300, world.h).setPosition(flip ? mid - 300 + 0 : mid, 0);
+        scene.fogVeil.setSize(mid - 300, world.h).setPosition(flip ? 0 : mid + 300, 0);
+        if (flip) scene.fogEdge.setPosition(mid - 300, 0);
+    }
     const patch = scene.reveal;
     scene.effectLive = false;
     if (patch && scene.view && scene.view.reveal) {
@@ -471,7 +616,8 @@ function paint(scene, pull) {
     scene.launchLabel.setPosition(origin.x, origin.y + 49);
     const phase = scene.fieldParent ? scene.fieldParent.dataset.phase : "";
     const botThinking = scene.fieldParent && scene.fieldParent.dataset.botThinking === "true";
-    scene.launchLabel.setText(phase === "finished" ? "DUEL OVER" : scene.yourTurn ? "PULL TO FIRE" : botThinking ? "BOT AIMING" : "STAND BY");
+    const aimWord = isLong() ? (scene.lockedPull ? "AIM SET / FIRE" : "DRAG TO AIM") : "PULL TO FIRE";
+    scene.launchLabel.setText(phase === "finished" ? "DUEL OVER" : scene.yourTurn ? aimWord : botThinking ? "BOT AIMING" : "STAND BY");
     scene.activePull = pull || null;
 }
 
@@ -489,7 +635,7 @@ function renderHud(data) {
     put("fogshot-observation", data.view && data.view.reveal ? "OBSERVATION OPEN / REMEMBER THIS" : "ENEMY STRUCTURES HIDDEN");
     const field = document.getElementById("fogshot-field");
     if (!data.your_turn) put("fogshot-pull", status.turn + (data.phase === "finished" ? ". Rematch starts another duel." : ". Wait for your turn."));
-    else if (field?.dataset.yourTurn !== "true" || field?.dataset.epoch !== String(data.epoch)) put("fogshot-pull", PULL_HELP);
+    else if (field?.dataset.yourTurn !== "true" || field?.dataset.epoch !== String(data.epoch)) put("fogshot-pull", isLong() ? LONG_HELP : PULL_HELP);
 }
 
 export function practiceFromLocation() {
@@ -538,6 +684,8 @@ function remember(parent, data) {
         parent.dataset.room = data.room;
     }
     parent.dataset.mode = data.mode || "multiplayer";
+    parent.dataset.fieldMode = FIELD.mode;
+    parent.dataset.fieldW = String(FIELD.w);
     parent.dataset.ridge = String(data.ridge ?? 0);
     parent.dataset.botLevel = String(data.bot_level ?? "");
     const spot = (data.view && data.view.own || []).find(body => body.role === "launcher");
@@ -597,7 +745,7 @@ export function mountField(parent) {
     const resetPullHint = () => {
         const hint = document.getElementById("fogshot-pull");
         if (hint) hint.textContent = parent.dataset.phase === "finished" ? "Duel finished. Rematch starts another duel."
-            : parent.dataset.yourTurn === "true" ? PULL_HELP : "Wait for your turn.";
+            : parent.dataset.yourTurn === "true" ? (isLong() ? LONG_HELP : PULL_HELP) : "Wait for your turn.";
     };
     const game = new Game({
         type: AUTO,
@@ -611,8 +759,11 @@ export function mountField(parent) {
                 this.load.svg("night-ridge", new URL("../assets/night-ridge.svg?no-inline", import.meta.url).href, { width: VIEW_W, height: VIEW_H });
             },
             create() {
-                this.add.image(0, 0, "night-ridge").setOrigin(0);
+                this.sky = this.add.image(0, 0, "night-ridge").setOrigin(0).setScrollFactor(0);
+                // Distant ridgelines scroll slowly on long fields (parallax); unused on the classic field.
+                this.farPen = this.add.graphics().setScrollFactor(.25);
                 this.landPen = this.add.graphics();
+                this.rangeLabels = Array.from({ length: 8 }, () => this.add.text(0, 0, "", { fontFamily: "Arial", fontSize: "10px", color: "#9fc2b6", resolution: 2 }).setOrigin(.5, 0).setVisible(false));
                 this.landKey = "";
                 const fog = this.textures.createCanvas("fog-bank", VIEW_W, VIEW_H);
                 const ctx = fog.context;
@@ -627,6 +778,19 @@ export function mountField(parent) {
                 }
                 fog.refresh();
                 this.fogBank = this.add.image(0, 0, "fog-bank").setOrigin(0);
+                // Long fields: a soft fog edge at the midline and an even veil over the enemy half.
+                // Light enough that the public terrain still reads under it.
+                const edge = this.textures.createCanvas("fog-edge", 256, 4);
+                const ectx = edge.context;
+                const ramp = ectx.createLinearGradient(0, 0, 256, 0);
+                ramp.addColorStop(0, "rgba(9,29,40,0)");
+                ramp.addColorStop(1, "rgba(9,29,40,.6)");
+                ectx.fillStyle = ramp; ectx.fillRect(0, 0, 256, 4);
+                edge.refresh();
+                this.fogEdge = this.add.image(0, 0, "fog-edge").setOrigin(0).setVisible(false);
+                this.fogVeil = this.add.rectangle(0, 0, 10, 10, 0x091d28, .6).setOrigin(0).setVisible(false);
+                // The public crest stays readable through the fog: you aim over those hills.
+                this.crestPen = this.add.graphics();
                 const wisp = this.textures.createCanvas("fog-wisp", 320, 110);
                 const wctx = wisp.context;
                 // Soft blurred ellipses; the padding keeps the blur from clipping into hard edges.
@@ -641,12 +805,17 @@ export function mountField(parent) {
                 }));
                 this.fogPen = this.add.graphics();
                 this.fxPen = this.add.graphics();
+                this.hudPen = this.add.graphics().setScrollFactor(0).setDepth(20);
+                this.landedAt = null; this.landPoint = null; this.lookAt = null; this.lockedPull = null;
+                this.aimDrag = null; this.panDrag = null; this.stripDrag = null; this.strip = null;
                 this.shards = []; this.flashes = []; this.trail = []; this.banner = null; this.bannerKey = "";
                 this.heading = null; this.landed = false; this.recoil = null; this.activePull = null; this.coach = true;
                 const bannerFont = { fontFamily: "Inter, 'Segoe UI', Arial, sans-serif", fontStyle: "bold", resolution: 2, align: "center" };
                 this.bannerTitle = this.add.text(VIEW_W / 2, 90, "", { ...bannerFont, fontSize: "30px", color: "#f4d58f" }).setOrigin(.5).setVisible(false);
                 this.bannerTitle.setLetterSpacing && this.bannerTitle.setLetterSpacing(4);
                 this.bannerSub = this.add.text(VIEW_W / 2, 120, "", { ...bannerFont, fontStyle: "normal", fontSize: "11px", color: "#c9d8cf" }).setOrigin(.5).setVisible(false);
+                this.bannerTitle.setScrollFactor(0).setDepth(21);
+                this.bannerSub.setScrollFactor(0).setDepth(21);
                 this.aimLabel = this.add.text(0, 0, "", { ...bannerFont, fontSize: "10px", color: "#f1d18b", backgroundColor: "#0c222bcc", padding: { x: 5, y: 2 } }).setOrigin(.5).setVisible(false);
                 this.coachLabel = this.add.text(0, 0, "DRAG BACK", { ...bannerFont, fontSize: "9px", color: "#f1d18b" }).setOrigin(.5).setVisible(false);
                 const labelStyle = { fontFamily: "Arial", fontSize: "9px", color: "#b8d6c6", backgroundColor: "#102a34", padding: { x: 5, y: 3 }, resolution: 2 };
@@ -683,6 +852,7 @@ export function mountField(parent) {
                 let contaminated = false;
                 cancelGesture = () => {
                     pull = null; keyboardPull = null; activeId = null; contaminated = false;
+                    this.aimDrag = null; this.panDrag = null; this.stripDrag = null;
                     parent.dataset.cancelled = "true";
                     resetPullHint();
                     paint(this, null);
@@ -723,8 +893,71 @@ export function mountField(parent) {
                     }
                 };
                 paint(this, null);
+                // ---- long range input: drag anywhere to aim (relative), release to set, FIRE to launch.
+                // Off-turn drags pan the camera; the minimap strip looks wherever you touch it.
+                const onStrip = (pointer) => {
+                    const strip = this.strip;
+                    return Boolean(strip) && pointer.x >= strip.x - 6 && pointer.x <= strip.x + strip.w + 6 && pointer.y >= strip.y - 8 && pointer.y <= strip.y + strip.h + 8;
+                };
+                const lookStrip = (pointer) => {
+                    const world = fieldPixels(FIELD);
+                    const x = overviewToWorld(pointer.x, this.strip, world);
+                    this.lookAt = { x, y: groundScreenY(this.terrain, x) - 140 };
+                    const cam = this.cameras.main;
+                    const at = cameraOn(this.lookAt, VIEW, world);
+                    cam.setScroll(at.x, at.y);
+                };
+                const longDown = (pointer) => {
+                    if (this.aimDrag || this.panDrag || this.stripDrag) {
+                        if (this.aimDrag) { contaminated = true; parent.dataset.extraPointer = "true"; }
+                        return;
+                    }
+                    if (onStrip(pointer)) { this.stripDrag = pointer.id; lookStrip(pointer); return; }
+                    if (parent.dataset.yourTurn === "true" && parent.dataset.phase !== "finished") {
+                        keyboardPull = null;
+                        this.lookAt = null;
+                        this.coach = false;
+                        dismissBanner(this);
+                        this.aimDrag = { id: pointer.id, start: { x: pointer.x, y: pointer.y }, base: this.lockedPull };
+                        activeId = pointer.id;
+                        pull = dragPull(this.seat, this.aimDrag.base, this.aimDrag.start, pointer);
+                        paint(this, pull);
+                        return;
+                    }
+                    const cam = this.cameras.main;
+                    this.panDrag = { id: pointer.id, start: { x: pointer.x, y: pointer.y }, scroll: { x: cam.scrollX, y: cam.scrollY } };
+                };
+                const longMove = (pointer) => {
+                    if (this.stripDrag === pointer.id) { lookStrip(pointer); return; }
+                    if (this.panDrag && this.panDrag.id === pointer.id) {
+                        const cam = this.cameras.main;
+                        const at = clampScroll({ x: this.panDrag.scroll.x + this.panDrag.start.x - pointer.x, y: this.panDrag.scroll.y + this.panDrag.start.y - pointer.y }, VIEW, fieldPixels(FIELD));
+                        cam.setScroll(at.x, at.y);
+                        this.lookAt = { x: at.x + VIEW.w / 2, y: at.y + VIEW.h / 2 };
+                        return;
+                    }
+                    if (this.aimDrag && this.aimDrag.id === pointer.id) {
+                        pull = dragPull(this.seat, this.aimDrag.base, this.aimDrag.start, pointer);
+                        parent.dataset.pointerX = String(pointer.x);
+                        parent.dataset.pointerY = String(pointer.y);
+                        paint(this, pull);
+                    }
+                };
+                const longUp = (pointer) => {
+                    if (this.stripDrag === pointer.id) { this.stripDrag = null; return; }
+                    if (this.panDrag && this.panDrag.id === pointer.id) { this.panDrag = null; return; }
+                    if (!this.aimDrag || this.aimDrag.id !== pointer.id) return;
+                    const candidate = dragPull(this.seat, this.aimDrag.base, this.aimDrag.start, pointer);
+                    const spoiled = contaminated || Boolean(pointer.wasCanceled);
+                    this.aimDrag = null; activeId = null; contaminated = false; pull = null;
+                    if (!spoiled && longAim(this.seat, candidate, FIELD).valid) setLocked(candidate);
+                    else parent.dataset.cancelled = "true";
+                    paint(this, null);
+                };
+                this.longInput = { down: longDown, move: longMove, up: longUp };
                 if (latest) applyData(latest);
                 this.input.on(handlers[0], (pointer) => {
+                    if (isLong()) { longDown(pointer); return; }
                     if (pull && !keyboardPull) {
                         contaminated = true;
                         if (parent) {
@@ -742,6 +975,7 @@ export function mountField(parent) {
                     paint(this, pull);
                 });
                 this.input.on(handlers[1], (pointer) => {
+                    if (isLong()) { longMove(pointer); return; }
                     if (!pull || pointer.id !== activeId) {
                         return;
                     }
@@ -753,15 +987,18 @@ export function mountField(parent) {
                     paint(this, pull);
                 });
                 this.input.on(handlers[2], (pointer) => {
+                    if (isLong()) { longUp(pointer); return; }
                     const outside = pointer.x < 0 || pointer.y < 0 || pointer.x > VIEW_W || pointer.y > VIEW_H;
                     finishPull(pointer, outside);
                 });
                 this.input.on("pointerupoutside", (pointer) => {
+                    if (isLong()) { longUp(pointer); return; }
                     finishPull(pointer, true);
                 });
             },
             update(time, delta) {
                 animate(this, time, delta);
+                if (isLong()) steerCamera(this, time, delta);
                 const path = this.path;
                 if (!path || !path.length) {
                     if (this.effectLive) paint(this, pull);
@@ -779,13 +1016,16 @@ export function mountField(parent) {
                 if (this.pathStart === null) {
                     this.pathStart = time;
                 }
-                const elapsed = (time - this.pathStart) / 1000;
+                // Long flights replay faster so a 6 s arc does not drag.
+                const elapsed = (time - this.pathStart) / 1000 * (isLong() ? PLAY_RATE_LONG : 1);
                 const point = sampleAt(path, elapsed, 2, false);
                 const last = path[path.length - 1];
                 if (!this.landed && point && elapsed >= (last.length > 2 ? last[2] : 0)) {
                     // The server path ended: land it with an impact instead of parking the shell.
                     this.landed = true;
-                    impact(this, worldToScreen(last[0], last[1]), this.pathWeapon || this.weapon, this.heading);
+                    this.landedAt = time;
+                    this.landPoint = worldToScreen(last[0], last[1]);
+                    impact(this, this.landPoint, this.pathWeapon || this.weapon, this.heading);
                 }
                 if (point) {
                     const next = worldToScreen(point[0], point[1]);
@@ -815,7 +1055,84 @@ export function mountField(parent) {
             },
         },
     });
+    // ---- long range aim: a locked aim survives between turns so you can correct from the last shot.
+    const aimBar = document.getElementById("fogshot-aimbar");
+    const readout = () => {
+        const out = document.getElementById("fogshot-aimread");
+        const fireButton = document.getElementById("fogshot-fire");
+        const locked = sceneRef && sceneRef.lockedPull ? longAim(sceneRef.seat, sceneRef.lockedPull, FIELD) : null;
+        const ready = Boolean(locked && locked.valid && parent.dataset.yourTurn === "true" && parent.dataset.phase !== "finished");
+        if (out) out.textContent = locked ? `${locked.degrees.toFixed(1)}° · ${(locked.fraction * 100).toFixed(1)}% · ${locked.power.toFixed(1)} m/s` : "Drag the field to aim";
+        if (fireButton) { fireButton.disabled = !ready; fireButton.classList.toggle("is-ready", ready); }
+        parent.dataset.aimLocked = locked && locked.valid ? "true" : "false";
+        if (locked) { parent.dataset.aimDegrees = locked.degrees.toFixed(2); parent.dataset.aimPercent = (locked.fraction * 100).toFixed(2); }
+    };
+    const setLocked = (padPull) => {
+        if (!sceneRef) return;
+        sceneRef.lockedPull = padPull ? { x: padPull.x, y: padPull.y } : null;
+        readout();
+        paint(sceneRef, pull);
+    };
+    const fireLong = () => {
+        if (!sceneRef || parent.dataset.yourTurn !== "true" || parent.dataset.phase === "finished" || !sceneRef.lockedPull) return;
+        const aim = longAim(sceneRef.seat, sceneRef.lockedPull, FIELD);
+        if (!aim.valid || !window.fogshotFire) return;
+        parent.dataset.cancelled = "false";
+        parent.dataset.pulls = String(Number(parent.dataset.pulls || 0) + 1);
+        parent.dataset.releaseX = String(aim.pointer.x);
+        parent.dataset.releaseY = String(aim.pointer.y);
+        sceneRef.lookAt = null;
+        window.fogshotFire(aim.pointer.x, aim.pointer.y);
+    };
+    const nudge = (kind, amount) => {
+        if (!sceneRef || parent.dataset.yourTurn !== "true") return;
+        const base = sceneRef.lockedPull || padFromAim(Math.PI / 4, .7, FIELD);
+        let padAngle = Math.atan2(base.y, base.x);
+        let fraction = Math.min(1, Math.hypot(base.x, base.y) / FIELD.full_pull);
+        if (kind === "angle") padAngle = Math.max(-19 * Math.PI / 180, Math.min(75 * Math.PI / 180, padAngle + amount * Math.PI / 180));
+        else fraction = Math.max(.06, Math.min(1, fraction + amount / 100));
+        sceneRef.coach = false;
+        dismissBanner(sceneRef);
+        sceneRef.lookAt = null;
+        setLocked(padFromAim(padAngle, fraction, FIELD));
+    };
+    const onBar = (event) => {
+        const button = event.target && event.target.closest ? event.target.closest("[data-aim]") : null;
+        if (!button || !sceneRef) return;
+        const act = button.dataset.aim;
+        const world = fieldPixels(FIELD);
+        const cam = sceneRef.cameras.main;
+        const facing = sceneRef.seat === "B" ? -1 : 1;
+        if (act === "fire") fireLong();
+        else if (act === "home") sceneRef.lookAt = null;
+        else if (act === "look-ahead" || act === "look-back") {
+            const step = (act === "look-ahead" ? 1 : -1) * facing * VIEW.w * .75;
+            const x = Math.max(0, Math.min(world.w, cam.scrollX + VIEW.w / 2 + step));
+            sceneRef.lookAt = { x, y: groundScreenY(sceneRef.terrain, x) - 140 };
+        }
+        else if (act === "angle-up") nudge("angle", .5);
+        else if (act === "angle-down") nudge("angle", -.5);
+        else if (act === "power-up") nudge("power", .5);
+        else if (act === "power-down") nudge("power", -.5);
+    };
+    if (aimBar) aimBar.addEventListener("click", onBar);
+    const onLongKey = (event) => {
+        if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Enter", " ", "Escape", "h", "H"].includes(event.key)) return false;
+        event.preventDefault();
+        if (!sceneRef) return true;
+        if (event.key === "h" || event.key === "H") { sceneRef.lookAt = null; return true; }
+        if (parent.dataset.yourTurn !== "true") return true;
+        const big = event.shiftKey ? 4 : 1;
+        if (event.key === "Escape") { cancelGesture(); setLocked(null); }
+        else if (event.key === "Enter" || event.key === " ") { if (!event.repeat) fireLong(); }
+        else if (event.key === "ArrowUp") nudge("angle", .5 * big);
+        else if (event.key === "ArrowDown") nudge("angle", -.5 * big);
+        else if (event.key === "ArrowRight") nudge("power", .5 * big);
+        else if (event.key === "ArrowLeft") nudge("power", -.5 * big);
+        return true;
+    };
     const onKey = (event) => {
+        if (isLong()) { onLongKey(event); return; }
         if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Enter", "Escape"].includes(event.key)) return;
         event.preventDefault();
         if (!sceneRef || parent.dataset.yourTurn !== "true") return;
@@ -861,6 +1178,7 @@ export function mountField(parent) {
     return {
         destroy() {
             parent.removeEventListener("keydown", onKey);
+            if (aimBar) aimBar.removeEventListener("click", onBar);
             window.removeEventListener("keydown", onRematchKey);
             window.removeEventListener("blur", onBlur);
             document.removeEventListener("visibilitychange", onVisible);
@@ -891,9 +1209,20 @@ export function mountField(parent) {
             }
             const observedAt = Date.now();
             data = observationAt(data, observedAt);
+            const nextField = fieldOf(data);
+            if (nextField.mode !== FIELD.mode || nextField.w !== FIELD.w || nextField.h !== FIELD.h) {
+                FIELD = nextField;
+                const px = fieldPixels(FIELD);
+                sceneRef.cameras.main.setBounds(0, 0, px.w, px.h);
+                if (!isLong()) sceneRef.cameras.main.setScroll(0, 0);
+                sceneRef.snapCamera = true;
+                sceneRef.landKey = "";
+                sceneRef.lockedPull = null;
+            }
             const nextEpoch = data.epoch === undefined ? sceneRef.epoch : data.epoch;
             const epochChanged = nextEpoch !== sceneRef.epoch;
             if (epochChanged) {
+                sceneRef.lockedPull = null; sceneRef.lookAt = null; sceneRef.landedAt = null; sceneRef.snapCamera = true;
                 sceneRef.path = null;
                 sceneRef.collapse = null;
                 sceneRef.collapseAngle = null;
@@ -906,6 +1235,7 @@ export function mountField(parent) {
                 sceneRef.revision = data.revision;
             }
             if (epochChanged || (sceneRef.yourTurn && !data.your_turn)) cancelGesture();
+            if (!sceneRef.yourTurn && data.your_turn && !(sceneRef.shot && !sceneRef.landed)) sceneRef.lookAt = null;
             const before = sceneRef.lastData;
             sceneRef.lastData = data;
             if (epochChanged) { sceneRef.shards = []; sceneRef.flashes = []; sceneRef.trail = []; sceneRef.landed = false; sceneRef.banner = null; sceneRef.bannerKey = ""; sceneRef.bannerTitle.setVisible(false); sceneRef.bannerSub.setVisible(false); }
@@ -933,7 +1263,8 @@ export function mountField(parent) {
                 showBanner(sceneRef, banner, bannerKey);
                 if (banner.kind === "victory" && sameDuel && before.phase !== "finished" && !sceneRef.reducedMotion) {
                     // Triangle confetti cascading from the top edge.
-                    for (let i = 0; i < 5; i++) spawn(sceneRef, burst(VIEW_W * (.15 + i * .175), -6, { count: 10, speed: 90, heading: Math.PI / 2, spread: 1.6, life: 2.2, size: 4 }), [0xf4d58f, 0x8fc5b6, 0xe5b56c, 0xf0e9c8]);
+                    const cam = sceneRef.cameras.main;
+                    for (let i = 0; i < 5; i++) spawn(sceneRef, burst(cam.scrollX + VIEW_W * (.15 + i * .175), cam.scrollY - 6, { count: 10, speed: 90, heading: Math.PI / 2, spread: 1.6, life: 2.2, size: 4 }), [0xf4d58f, 0x8fc5b6, 0xe5b56c, 0xf0e9c8]);
                 }
             } else if (!banner) dismissBanner(sceneRef);
             if (data.result && data.seat) saveRecord(recordAfter(loadRecord(), data, `${data.room || parent.dataset.room || ""}:${data.epoch}`));
@@ -962,7 +1293,7 @@ export function mountField(parent) {
                 sceneRef.powered = data.own_powered;
             }
             const now = sceneRef.time ? sceneRef.time.now : 0;
-            const elapsed = sceneRef.pathStart === null ? 0 : (now - sceneRef.pathStart) / 1000;
+            const elapsed = sceneRef.pathStart === null ? 0 : (now - sceneRef.pathStart) / 1000 * (isLong() ? PLAY_RATE_LONG : 1);
             const frame = stepWatch({
                 path: sceneRef.path,
                 collapse: sceneRef.collapse,
@@ -973,6 +1304,7 @@ export function mountField(parent) {
             if (frame.path !== sceneRef.path) {
                 sceneRef.pathStart = frame.path ? now : null;
                 sceneRef.trail = []; sceneRef.landed = false; sceneRef.heading = null; sceneRef.shot = null;
+                sceneRef.landedAt = null; sceneRef.lookAt = null;
                 sceneRef.pathWeapon = data.weapon || sceneRef.weapon;
                 if (frame.path && frame.path.length) {
                     const origin = worldToScreen(frame.path[0][0], frame.path[0][1]);
@@ -998,5 +1330,6 @@ export function mountField(parent) {
             if (Array.isArray(data.terrain)) sceneRef.terrain = data.terrain;
             paintLand(sceneRef, data);
             paint(sceneRef, pull);
+            readout();
     }
 }

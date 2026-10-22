@@ -168,7 +168,7 @@ export function ridgeRandom(seed) {
 
 // Distant silhouettes: each layer sums a few sines with seeded wavelengths and phases.
 // Returns screen polylines (800 x 400), back layer first.
-export function ridgeLines(ridge, layers = 3, step = 16) {
+export function ridgeLines(ridge, layers = 3, step = 16, width = 800) {
     if (!ridge || ridge <= 0) return [];
     const rand = ridgeRandom(ridge);
     const out = [];
@@ -176,7 +176,7 @@ export function ridgeLines(ridge, layers = 3, step = 16) {
         const base = 228 + layer * 30 + rand() * 14;
         const waves = [0, 1, 2].map(k => ({ amp: (16 - layer * 3) / (k + 1) * (.6 + rand() * .8), freq: (k + 1) * (.006 + rand() * .01), phase: rand() * Math.PI * 2 }));
         const points = [];
-        for (let x = 0; x <= 800; x += step) {
+        for (let x = 0; x <= width; x += step) {
             let y = base;
             for (const w of waves) y -= w.amp * Math.sin(x * w.freq + w.phase);
             // A sharp triangular peak now and then, like a far relay crag.
@@ -189,14 +189,136 @@ export function ridgeLines(ridge, layers = 3, step = 16) {
 }
 
 // Public ground profile (world metres) to a closed screen polygon down to the bottom edge.
-export function terrainPolygon(terrain) {
+export function terrainPolygon(terrain, height = 16, floor = 0) {
     if (!Array.isArray(terrain) || terrain.length < 2) return [];
-    const top = terrain.map(([x, y]) => ({ x: x * 20, y: (1 - y / 16) * 400 }));
-    return [...top, { x: top[top.length - 1].x, y: 400 }, { x: top[0].x, y: 400 }];
+    const bottom = height * 25 + floor;
+    const top = terrain.map(([x, y]) => ({ x: x * 20, y: (height - y) * 25 }));
+    return [...top, { x: top[top.length - 1].x, y: bottom }, { x: top[0].x, y: bottom }];
 }
 
 export function ridgeLabel(data) {
     if (!data || data.ridge === undefined) return "01 / RIDGELINE";
     const name = String(data.layout_name || (data.ridge > 0 ? `Ridge #${data.ridge}` : "Classic ridge")).toUpperCase();
     return data.mode === "practice" && data.bot_level ? `${name} · BOT LV ${data.bot_level}` : name;
+}
+
+// ---------- long-range artillery ----------
+// Generated ridges are 160 m wide. The world is drawn at 20 px/m across and 25 px/m up,
+// the same scale as the classic 800 x 400 field, so the camera shows a 40 m x 16 m window.
+export const CLASSIC_FIELD = Object.freeze({ mode: "classic", w: 40, h: 16 });
+
+export function fieldOf(data) {
+    const field = data && data.field;
+    if (!field || field.mode !== "long") return CLASSIC_FIELD;
+    const num = (key, fallback) => Number.isFinite(Number(field[key])) ? Number(field[key]) : fallback;
+    return {
+        mode: "long", w: num("w", 160), h: num("h", 96), pad_x: num("pad_x", 400), pad_y: num("pad_y", 200),
+        full_pull: num("full_pull", 240), min_pull: num("min_pull", 12), v_max: num("v_max", 44),
+        gravity: num("gravity", 9.81), drag: num("drag", .97), shell: num("shell", .3), blast: num("blast", 1.5),
+    };
+}
+
+// Long fields keep LONG_FLOOR px of soil under y = 0 so the home view is not pinned to the bottom edge.
+export const LONG_FLOOR = 110;
+
+export function fieldPixels(field) {
+    return { w: field.w * 20, h: field.h * 25 + (field.mode === "long" ? LONG_FLOOR : 0) };
+}
+
+export function toScreen(field, x, y) {
+    return { x: x * 20, y: (field.h - y) * 25 };
+}
+
+export function aimAngleOk(seat, angle) {
+    return Number.isFinite(angle) && Math.cos(angle) * (seat === "B" ? -1 : 1) > .25 && Math.sin(angle) > -.35;
+}
+
+// Screen drag -> pad pull. Pulling back (away from the enemy) and down aims up and forward.
+// Seat B mirrors x so both seats share one pad frame, exactly like the server protocol.
+export function dragPull(seat, base, start, current) {
+    const dx = start.x - current.x;
+    const dy = current.y - start.y;
+    return { x: (base ? base.x : 0) + (seat === "B" ? -dx : dx), y: (base ? base.y : 0) + dy };
+}
+
+export function padFromAim(padAngle, fraction, field) {
+    const span = Math.max(0, Math.min(1, fraction)) * field.full_pull;
+    return { x: Math.cos(padAngle) * span, y: Math.sin(padAngle) * span };
+}
+
+// Mirrors game/aim.jac release_long: pad pull -> world angle, launch speed and the wire pointer.
+export function longAim(seat, padPull, field) {
+    const span = Math.hypot(padPull.x, padPull.y);
+    const padAngle = Math.atan2(padPull.y, padPull.x);
+    const angle = seat === "B" ? Math.PI - padAngle : padAngle;
+    const fraction = Math.min(1, span / field.full_pull);
+    const clamp = span > field.full_pull ? field.full_pull / span : 1;
+    const valid = Number.isFinite(span) && span >= field.min_pull && aimAngleOk(seat, angle);
+    return {
+        valid, angle, padAngle, fraction, power: fraction * field.v_max,
+        degrees: padAngle * 180 / Math.PI,
+        pointer: {
+            x: Math.round((field.pad_x - padPull.x * clamp) * 1000) / 1000,
+            y: Math.round((field.pad_y + padPull.y * clamp) * 1000) / 1000,
+        },
+    };
+}
+
+// Only the first `seconds` of flight: enough to read the launch angle and the bend of the arc,
+// never the landing. Same public gravity and drag as the server shell.
+export function previewArc(aim, launcher, field, seconds = .4, step = 1 / 60) {
+    const points = [];
+    if (!aim || !aim.valid) return points;
+    let x = launcher.x, y = launcher.y;
+    let vx = Math.cos(aim.angle) * aim.power, vy = Math.sin(aim.angle) * aim.power;
+    const keep = Math.pow(field.drag, step);
+    for (let n = 1; n * step <= seconds + 1e-9; n++) {
+        vx *= keep;
+        vy = vy * keep - field.gravity * step;
+        x += vx * step;
+        y += vy * step;
+        if (n % 4 === 0) points.push({ x, y, heading: Math.atan2(vy, vx) });
+    }
+    return points;
+}
+
+export function clampScroll(scroll, view, world) {
+    return {
+        x: Math.max(0, Math.min(world.w - view.w, scroll.x)),
+        y: Math.max(0, Math.min(world.h - view.h, scroll.y)),
+    };
+}
+
+// Home view: own launcher a fifth in from its edge, the ground near the bottom.
+export function cameraHome(seat, launcherPx, view, world) {
+    const x = seat === "B" ? launcherPx.x - view.w * .8 : launcherPx.x - view.w * .2;
+    return clampScroll({ x, y: launcherPx.y - view.h * .58 }, view, world);
+}
+
+// Centre the camera on a world pixel (a shell in flight, an impact, a look target).
+export function cameraOn(point, view, world) {
+    return clampScroll({ x: point.x - view.w / 2, y: point.y - view.h / 2 }, view, world);
+}
+
+// The overview strip across the top of the screen, in screen pixels.
+export function overviewRect(view, scale = 1) {
+    const h = Math.round(26 * Math.min(1.8, Math.max(1, scale)));
+    const w = Math.min(view.w - 220, 560);
+    return { x: Math.round((view.w - w) / 2), y: 8, w, h };
+}
+
+export function overviewToWorld(screenX, strip, world) {
+    return Math.max(0, Math.min(world.w, (screenX - strip.x) / strip.w * world.w));
+}
+
+// Range marks every `every` metres from your launcher toward the enemy (public, for reading distance).
+export function rangeMarks(seat, launcherX, field, every = 20) {
+    const marks = [];
+    const dir = seat === "B" ? -1 : 1;
+    for (let d = every; d < field.w; d += every) {
+        const x = launcherX + dir * d;
+        if (x < 1 || x > field.w - 1) break;
+        marks.push({ x, label: `${d} m` });
+    }
+    return marks;
 }
