@@ -119,7 +119,9 @@ try {
             held=true;capturedDelayed();
             await delayGate;
         }
-        await route.fulfill({response});
+        // unroute() can race a slow in-flight poll (long-range ridges are generated in the background); then
+        // Playwright has already continued it and there is nothing left to fulfil.
+        await route.fulfill({response}).catch(e=>{if(!/already handled/.test(String(e))) throw e;});
     };
     await page.route("**/function/watch_match",delayedRoute);
     await pull(20,300);

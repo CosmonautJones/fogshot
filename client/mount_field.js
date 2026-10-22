@@ -1055,6 +1055,11 @@ export function mountField(parent) {
             },
         },
     });
+    // Phaser re-reads the canvas position only every 500 ms, so a layout shift above the field (a
+    // label wrapping on a phone) could offset the first touch of a drag. Refresh it before Phaser
+    // sees the press (capture phase on the parent runs before the canvas listeners).
+    const freshBounds = () => { if (game.scale) game.scale.updateBounds(); };
+    for (const type of ["pointerdown", "touchstart", "mousedown"]) parent.addEventListener(type, freshBounds, { capture: true, passive: true });
     // ---- long range aim: a locked aim survives between turns so you can correct from the last shot.
     const aimBar = document.getElementById("fogshot-aimbar");
     const readout = () => {
@@ -1178,6 +1183,7 @@ export function mountField(parent) {
     return {
         destroy() {
             parent.removeEventListener("keydown", onKey);
+            for (const type of ["pointerdown", "touchstart", "mousedown"]) parent.removeEventListener(type, freshBounds, { capture: true });
             if (aimBar) aimBar.removeEventListener("click", onBar);
             window.removeEventListener("keydown", onRematchKey);
             window.removeEventListener("blur", onBlur);

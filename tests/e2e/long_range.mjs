@@ -27,7 +27,9 @@ async function run(vp) {
     const start = await data(page);
     assert.ok(Number(start.fieldW)>=124 && Number(start.fieldW)<=160,"long field width "+start.fieldW);
     assert.equal(start.camera,"home");
-    assert.equal(Number(start.cameraX),0,"seat A home view should start at its own edge");
+    // Seat A's home view puts its launcher 20% in from the left (clamped at the field edge).
+    const homeX = Math.max(0, Number(start.launcherX)*20-160);
+    assert.ok(Math.abs(Number(start.cameraX)-homeX)<3,"seat A home view "+start.cameraX+" vs "+homeX);
     assert.ok(await page.locator("#fogshot-fire").isDisabled(),"FIRE must wait for an aim");
     const b = await page.locator("#fogshot-field canvas").boundingBox();
     // Drag anywhere (relative): back 150 and down 110 canvas px.
@@ -41,7 +43,7 @@ async function run(vp) {
     }
     await page.waitForFunction(()=>document.getElementById("fogshot-field").dataset.aimLocked==="true",null,{timeout:5000});
     const locked = await data(page);
-    assert.ok(Math.abs(Number(locked.aimDegrees)-Math.atan2(110,150)*180/Math.PI)<0.6,"drag angle "+locked.aimDegrees);
+    assert.ok(Math.abs(Number(locked.aimDegrees)-Math.atan2(110,150)*180/Math.PI)<0.6,vp.name+" drag angle "+locked.aimDegrees+" power "+locked.aimPercent);
     assert.ok(Math.abs(Number(locked.aimPercent)-Math.hypot(150,110)/240*100)<1.2,"drag power "+locked.aimPercent);
     assert.equal((await data(page)).yourTurn,"true","releasing the drag must not fire");
     // Fine-tune: half a degree up, half a percent more power.
@@ -61,7 +63,7 @@ async function run(vp) {
     await page.waitForFunction(()=>document.getElementById("fogshot-field").dataset.camera==="follow",null,{timeout:5000});
     await page.waitForFunction(()=>Number(document.getElementById("fogshot-field").dataset.cameraX)>800,null,{timeout:8000});
     await capture(page,`long-${vp.name}-follow`);
-    await page.waitForFunction(()=>{const d=document.getElementById("fogshot-field").dataset;return d.camera==="home" && Number(d.cameraX)<40;},null,{timeout:20000});
+    await page.waitForFunction(h=>{const d=document.getElementById("fogshot-field").dataset;return d.camera==="home" && Math.abs(Number(d.cameraX)-h)<8;},homeX,{timeout:20000});
     // Minimap: touch the far end of the strip to look at the enemy side.
     await page.waitForFunction(()=>document.getElementById("fogshot-field").dataset.botThinking==="false",null,{timeout:30000});
     await page.waitForTimeout(1600);
@@ -70,7 +72,7 @@ async function run(vp) {
     await page.waitForFunction(()=>{const d=document.getElementById("fogshot-field").dataset;return d.camera==="look" && Number(d.cameraX)>1200;},null,{timeout:5000});
     await capture(page,`long-${vp.name}-overview`);
     await page.locator("[data-aim='home']").click();
-    await page.waitForFunction(()=>{const d=document.getElementById("fogshot-field").dataset;return d.camera==="home" && Number(d.cameraX)<40;},null,{timeout:8000});
+    await page.waitForFunction(h=>{const d=document.getElementById("fogshot-field").dataset;return d.camera==="home" && Math.abs(Number(d.cameraX)-h)<8;},homeX,{timeout:8000});
     // The locked aim survives into the next turn so a correction starts from the last shot.
     assert.equal((await data(page)).aimLocked,"true");
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),"overflow at "+vp.name);
