@@ -168,6 +168,8 @@ obj LiveMatch {
     has shot_collapse_id: str = "";
     # None is the hand-tuned classic ridge (fixtures and legacy rooms); otherwise a generated layout.
     has layout: any = None;
+    # Who fired each crater in world.craters() (same order); decides which seat may see it.
+    has crater_seats: list[str] = [];
 }
 
 glob _shared: LiveMatch | None = None;
@@ -222,6 +224,7 @@ def _field(live: LiveMatch) -> dict[str, any] {
 def _arm_generated(live: LiveMatch) -> None {
     layout = live.layout;
     live.world = build_long(layout, True) if is_long(layout) else build_world(layout, True);
+    live.crater_seats = [];
     live.core_a_alive = True;
     live.core_b_alive = True;
     la = _launcher(live, "A");
@@ -469,6 +472,8 @@ def _save_canonical(live: LiveMatch, fail: bool) -> None {
         "shot_collapse": live.shot_collapse,
         "shot_collapse_id": live.shot_collapse_id,
         "bodies": bodies,
+        "debris": live.world.debris_specs,
+        "craters": [[mark[0], mark[1], mark[2], live.crater_seats[i] if i < len(live.crater_seats) else ""] for (i, mark) in enumerate(live.world.craters())],
         "layout": live.layout
     });
     _replace_file(_canonical_path(live.table.directory), text, fail);
@@ -524,6 +529,18 @@ def _load_canonical(live: LiveMatch) -> bool {
             vy=float(row["vy"]),
             ang_vel=float(row["ang_vel"])
         ));
+    }
+    marks: list[list[float]] = [];
+    live.crater_seats = [];
+    for row in data.get("craters", []) {
+        marks.append([float(row[0]), float(row[1]), float(row[2])]);
+        live.crater_seats.append(str(row[3]));
+    }
+    if len(marks) > 0 {
+        live.world.rewind_craters(marks);
+    }
+    for spec in data.get("debris", []) {
+        live.world.add_debris(spec);
     }
     live.world.restore(saved);
     _sync_post(live);
@@ -626,7 +643,56 @@ def _seat(live: LiveMatch, player_id: str) -> str {
     return "";
 }
 
+# Debris fragments are secret bodies owned like the block they came from: the owner sees them,
+# the other seat only inside a live reveal patch (project_view), so fragments cannot leak a layout.
+def _sync_debris(live: LiveMatch) -> None {
+    if not _long(live) {
+        return;
+    }
+    owners: dict[str, str] = {};
+    kept: list[SecretBody] = [];
+    for secret in live.table.secrets {
+        if secret.role.startswith("debris") {
+            continue;
+        }
+        owners[secret.id] = secret.owner;
+        kept.append(secret);
+    }
+    for track in live.world.tracks {
+        if track.role != "debris" or track.broken {
+            continue;
+        }
+        state = live.world.read_state(track);
+        kept.append(SecretBody(id=track.id, owner=owners.get(track.parent, "hidden"), x=state.x, y=state.y,
+            w=track.w, h=track.h, angle=state.angle, role="debris-" + live.world.debris_material(track),
+            alive=True, health=track.health));
+    }
+    live.table.secrets = kept;
+}
+
+# Craters are public ground, but only to a seat that saw the burst: its own shells, and any
+# crater on its own half. A miss in the shooter's own half stays hidden from the defender.
+def _craters_for(live: LiveMatch, seat: str) -> list[list[float]] {
+    shown: list[list[float]] = [];
+    if seat == "" or not _long(live) {
+        return shown;
+    }
+    mid = _field_width(live) / 2.0;
+    marks = live.world.craters();
+    index = 0;
+    for mark in marks {
+        shooter = live.crater_seats[index] if index < len(live.crater_seats) else "";
+        index = index + 1;
+        home = (seat == "A" and mark[0] <= mid) or (seat == "B" and mark[0] >= mid);
+        if shooter == seat or home {
+            shown.append([round(mark[0], 3), round(mark[1], 3), round(mark[2], 3)]);
+        }
+    }
+    return shown;
+}
+
 def _sync_post(live: LiveMatch) -> None {
+    _sync_debris(live);
     for secret in live.table.secrets {
         body_id = secret.id;
         if secret.role in ["launcher", "marker", "ground", "objective"] {
@@ -966,6 +1032,7 @@ def _encode(
         "ridge": _ridge(live),
         "layout_name": ridge_name(_ridge(live)),
         "terrain": _public_terrain(live),
+        "craters": _craters_for(live, seat),
         "field": _field(live)
     };
     if live.practice is not None {
@@ -1014,7 +1081,11 @@ def _launch(
         power * math.sin(angle),
         LONG_SHELL_R if long else 0.16
     );
+    before = len(live.world.craters());
     outcome = live.world.simulate(max_steps=LONG_STEPS if long else 1400);
+    for _ in range(len(live.world.craters()) - before) {
+        live.crater_seats.append(seat);
+    }
     _apply_hit(live, outcome, weapon);
     if reveal {
         _reveal_on(live, outcome, seat, now_ms, weapon);
@@ -1098,6 +1169,8 @@ def take_shot(
     previous_practice = json.loads(json.dumps(live.practice));
     previous = copy_rules(live.table.rules);
     saved = live.world.capture();
+    saved_craters = live.world.craters();
+    saved_crater_seats = [item for item in live.crater_seats];
     reveal_seat = live.reveal_seat;
     reveal_until = live.reveal_until;
     reveal_x = live.reveal_x;
@@ -1142,6 +1215,8 @@ def take_shot(
     }
     if not committed {
         live.practice = previous_practice;
+        live.world.rewind_craters(saved_craters);
+        live.crater_seats = saved_crater_seats;
         live.world.restore(saved);
         live.table.rules = previous;
         live.table.shots = shots_before;
