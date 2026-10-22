@@ -92,6 +92,28 @@ def _terrain(space, points, body_id):
     space.add(*made)
     return len(made)
 
+def _dragged(body, keep):
+    # Long-range shells ignore space damping (which settles blocks) and keep
+    # `keep` of their speed per second instead: light air drag, true gravity.
+    import pymunk
+    def _velocity(b, gravity, damping, dt):
+        pymunk.Body.update_velocity(b, gravity, float(keep) ** dt, dt)
+    body.velocity_func = _velocity
+
+def _gap(shape, x, y):
+    # Distance from a blast point to a shape's surface; 0 when inside.
+    found = shape.point_query((float(x), float(y)))
+    return max(0.0, float(found.distance))
+
+def _push(body, x, y, amount):
+    pos = body.position
+    dx = float(pos.x) - float(x)
+    dy = float(pos.y) - float(y)
+    span = (dx * dx + dy * dy) ** 0.5
+    if span < 1e-6:
+        dx, dy, span = 0.0, 1.0, 1.0
+    body.apply_impulse_at_world_point((dx / span * amount, dy / span * amount), (float(pos.x), float(pos.y)))
+
 def _static_box(space, body_id, x, y, w, h):
     import pymunk
     body = pymunk.Body(body_type=pymunk.Body.STATIC)
@@ -182,6 +204,15 @@ obj PhysicsWorld {
     has strike_y: float = 0.0;
     has strike_step: int = -1;
     has step_index: int = 0;
+    # Long-range artillery: a shell bursts on first contact (0 radius = classic toss).
+    has blast_radius: float = 0.0;
+    has blast_damage: float = 0.0;
+    has blast_push: float = 0.0;
+    has shell_drag: float = 1.0;
+    has settle_after: int = 0;
+    has blast_step: int = -1;
+    has blast_x: float = 0.0;
+    has blast_y: float = 0.0;
 
     def ensure() -> None {
         if self.space is not None {
@@ -319,6 +350,9 @@ obj PhysicsWorld {
         shape.collision_type = 3;
         shape.fog_id = body_id;
         self.space.add(body, shape);
+        if self.shell_drag < 1.0 {
+            _dragged(body, self.shell_drag);
+        }
         self.tracks.append(Tracked(
             id=body_id,
             role="projectile",
@@ -547,6 +581,36 @@ obj PhysicsWorld {
         return SimOutcome(steps=steps, pairs=copied, bodies=states);
     }
 
+    def detonate() -> None {
+        # First contact: the shell is gone and everything within the blast radius
+        # takes falloff damage and a push. Flares (deal_damage off) just stop.
+        self.blast_step = self.step_index;
+        self.blast_x = self.impact_x;
+        self.blast_y = self.impact_y;
+        self.drop_projectiles();
+        if not self.deal_damage or self.blast_radius <= 0.0 {
+            return;
+        }
+        hits: list[tuple[str, float]] = [];
+        for track in self.tracks {
+            if track.broken {
+                continue;
+            }
+            gap = _gap(track.shape, self.blast_x, self.blast_y) as float;
+            if gap >= self.blast_radius {
+                continue;
+            }
+            share = 1.0 - gap / self.blast_radius;
+            hits.append((track.id, self.blast_damage * share));
+            if track.kind == "dynamic" {
+                _push(track.body, self.blast_x, self.blast_y, self.blast_push * share);
+            }
+        }
+        for hit in hits {
+            self.hurt(hit[0], hit[1]);
+        }
+    }
+
     def simulate(max_steps: int = 600) -> SimOutcome {
         self.ensure();
         self.pairs = [];
@@ -561,12 +625,22 @@ obj PhysicsWorld {
         self.strike_step = -1;
         self.strike_x = 0.0;
         self.strike_y = 0.0;
+        self.blast_step = -1;
+        self.blast_x = 0.0;
+        self.blast_y = 0.0;
         steps = 0;
         while steps < max_steps {
             self.step_index = steps;
             self.space.step(self.dt);
             steps = steps + 1;
             self.flush();
+            if self.blast_radius > 0.0 and self.impact_step >= 0 and self.blast_step < 0 {
+                self._remember_projectile();
+                self.detonate();
+            }
+            if self.blast_step >= 0 and self.settle_after > 0 and steps - self.blast_step > self.settle_after {
+                break;
+            }
             if steps % 20 == 0 {
                 self._remember_projectile();
                 self._remember_posts();

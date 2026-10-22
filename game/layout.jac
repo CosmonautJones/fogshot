@@ -254,16 +254,23 @@ def _material(rng: Rng) -> tuple[str, float, float] {
 }
 
 # One outpost for `owner`, attacked from launcher (lx, ly). dir points from that launcher to the outpost.
-def make_outpost(seed: int, owner: str, terrain: list[list[float]], lx: float, ly: float) -> list[dict[str, any]] {
+# Long-range ridges pass dir_sign (+1 / -1), the core band and the zone reach explicitly.
+def make_outpost(seed: int, owner: str, terrain: list[list[float]], lx: float, ly: float, dir_sign: float = 0.0, core_lo: float = 3.5, core_hi: float = 6.6, reach_cap: float = -1.0) -> list[dict[str, any]] {
     rng = make_rng(seed);
     dir = 1.0 if owner == "B" else -1.0;
+    if dir_sign != 0.0 {
+        dir = dir_sign;
+    }
     tag = owner.lower();
     reach = abs(20.0 - lx) - 0.7;
+    if reach_cap > 0.0 {
+        reach = reach_cap;
+    }
     pieces: list[dict[str, any]] = [];
     core = rng.uniform(0.6, 0.9);
     width = rng.uniform(1.9, 3.2);
     # Free flight from a launcher tops out near 6.5 m downrange at core height.
-    d_core = rng.uniform(3.5, min(6.6, reach - 1.1));
+    d_core = rng.uniform(core_lo, min(core_hi, reach - 1.1));
     offset = rng.uniform(-0.45, 0.45) * (width / 2.0 - core / 2.0 - 0.1);
     d_found = min(reach - width / 2.0, max(2.9 + width / 2.0, d_core + offset));
     fx = lx + dir * d_found;
@@ -295,7 +302,9 @@ def make_outpost(seed: int, owner: str, terrain: list[list[float]], lx: float, l
         ww = rng.uniform(0.45, 0.7) if crate else rng.uniform(0.22, 0.4);
         wh = ww if crate else rng.uniform(0.6, 1.8);
         front = rng.chance(0.7);
-        side = -dir if front else dir;
+        # The front faces the attacker: back toward the enemy launcher in classic, onward in long range.
+        face = -dir if dir_sign == 0.0 else dir;
+        side = face if front else -face;
         gap = rng.uniform(0.08, 0.5);
         rim = used[0][0] if side < 0.0 else used[0][1];
         for span in used {
@@ -346,15 +355,20 @@ def geometry_faults(layout: dict[str, any]) -> list[str] {
     pieces = layout["pieces"];
     launchers = [layout["launcher_a"], layout["launcher_b"]];
     terrain = layout["terrain"];
+    width = float(layout.get("width", 40.0));
+    ceiling = float(layout.get("height", 16.0)) - 4.0;
+    mid = width / 2.0;
     roles: list[str] = [];
     for piece in pieces {
         box = bounds(piece);
         owner = str(piece["owner"]);
         roles.append(owner + ":" + str(piece["role"]));
-        if box[0] < 0.5 or box[1] > 39.5 or box[3] > 12.0 {
+        if box[0] < 0.5 or box[1] > width - 0.5 or box[3] > ceiling {
             faults.append("bounds:" + str(piece["id"]));
         }
-        if (owner == "B" and box[1] > 19.7) or (owner == "A" and box[0] < 20.3) {
+        # Classic lobs: each outpost sits in front of the enemy launcher. Long range: in its own half.
+        near_a = (owner == "A") == (str(layout.get("mode", "short")) == "long");
+        if (near_a and box[1] > mid - 0.3) or (not near_a and box[0] < mid + 0.3) {
             faults.append("side:" + str(piece["id"]));
         }
         for launcher in launchers {

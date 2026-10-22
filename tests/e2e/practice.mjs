@@ -32,7 +32,9 @@ async function pull(x,y) {
     const [response]=await Promise.all([
         page.waitForResponse(r=>r.request().method()==="POST" && r.url().includes("/function/loose_shot")),
         (async()=>{await page.mouse.move(b.x+120*b.width/800,b.y+300*b.height/400);await page.mouse.down();
-            await page.mouse.move(b.x+x*b.width/800,b.y+y*b.height/400,{steps:6});await page.mouse.up();})()
+            await page.mouse.move(b.x+x*b.width/800,b.y+y*b.height/400,{steps:6});await page.mouse.up();
+            // Long-range ridges: the drag only sets the aim; Enter fires it.
+            if(await page.evaluate(()=>document.getElementById("fogshot-field").dataset.fieldMode==="long")) await page.keyboard.press("Enter");})()
     ]);
     const envelope=await response.json();
     const receipt=JSON.parse(envelope.data.result);
@@ -117,7 +119,9 @@ try {
             held=true;capturedDelayed();
             await delayGate;
         }
-        await route.fulfill({response});
+        // unroute() can race a slow in-flight poll (long-range ridges are generated in the background); then
+        // Playwright has already continued it and there is nothing left to fulfil.
+        await route.fulfill({response}).catch(e=>{if(!/already handled/.test(String(e))) throw e;});
     };
     await page.route("**/function/watch_match",delayedRoute);
     await pull(20,300);

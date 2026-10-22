@@ -350,6 +350,21 @@ def:pub Battlefield -> JsxElement {
             <div className="field-caption">THE RIDGELINE / AFTER DARK</div>
             <div className="field-hint" id="fogshot-observation">ENEMY STRUCTURES HIDDEN</div>
         </div>
+        <div className="aim-bar" id="fogshot-aimbar" role="toolbar" aria-label="Artillery controls">
+            <div className="aim-group">
+                <button type="button" className="aim-button" data-aim="look-back" aria-label="Look back toward your side">◀</button>
+                <button type="button" className="aim-button" data-aim="home" aria-label="Camera home to your launcher (H)">Home</button>
+                <button type="button" className="aim-button" data-aim="look-ahead" aria-label="Look ahead toward the enemy">▶</button>
+            </div>
+            <output className="aim-read" id="fogshot-aimread" aria-live="polite">Drag the field to aim</output>
+            <div className="aim-group">
+                <button type="button" className="aim-button" data-aim="angle-down" aria-label="Lower the angle half a degree (Down)">∠−</button>
+                <button type="button" className="aim-button" data-aim="angle-up" aria-label="Raise the angle half a degree (Up)">∠+</button>
+                <button type="button" className="aim-button" data-aim="power-down" aria-label="Less power (Left)">P−</button>
+                <button type="button" className="aim-button" data-aim="power-up" aria-label="More power (Right)">P+</button>
+                <button type="button" className="aim-button aim-fire" id="fogshot-fire" data-aim="fire" disabled={True}>FIRE</button>
+            </div>
+        </div>
         <p className="control-strip" id="fogshot-pull" role="status" aria-live="polite">Drag back and release. Keyboard: Tab to field, arrows aim, Enter fires, Escape cancels.</p>
         <div className="status-bar" aria-label="Match status">
             <div className="stat"><span className="stat-label">INITIATIVE</span><strong id="fogshot-turn">Connecting...</strong></div>
