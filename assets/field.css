@@ -5,3 +5,30 @@
 .utility-button:disabled{opacity:.45;cursor:default}
 
 .control-strip{margin:10px 0 0;font-size:12px;line-height:1.6;color:#b6d6c6}
+
+/* Playtest polish pass */
+.briefing-meta{display:flex;gap:14px;align-items:center}
+.briefing .record-chip{font-family:monospace;font-size:11px;letter-spacing:.1em;color:#e7cf93;background:#132f39;border:1px solid #35525b;border-radius:999px;padding:3px 10px;white-space:nowrap}
+.utility-button.is-ready{background:#3a5a3f;border-color:#e7cf93;color:#fff6dc;box-shadow:0 0 0 0 #e7cf9366;animation:fogshot-ready 1.6s ease-out infinite}
+.utility-button.is-ready:hover{background:#4a7050}
+@keyframes fogshot-ready{0%{box-shadow:0 0 0 0 #e7cf9370}70%{box-shadow:0 0 0 10px #e7cf9300}100%{box-shadow:0 0 0 0 #e7cf9300}}
+.arena-frame{transition:box-shadow .3s ease}
+#fogshot-field:focus-visible{outline:none}
+.arena-frame:has(#fogshot-field[data-your-turn="true"]){box-shadow:0 25px 70px #0004,0 0 0 1px #e7cf9355,0 0 28px #e7cf9318}
+.arena-frame:has(#fogshot-field:focus-visible){box-shadow:0 0 0 3px #f0c77b}
+@media(max-width:680px){.fogshot-shell{padding:18px 10px}.briefing .record-chip{font-size:9px;padding:2px 7px}.briefing-meta{gap:8px}.briefing span:not(.record-chip){display:none}}
+/* Phones held sideways: keep the whole field on screen while aiming. */
+@media(orientation:landscape) and (max-height:520px){
+.fogshot-shell{padding:6px 14px 14px}
+.masthead{margin-bottom:6px;align-items:center}
+.eyebrow,.tagline{display:none}
+.brand{font-size:20px}
+.utilities{max-width:none;flex-wrap:nowrap}
+.utility-button{min-height:36px;padding:6px 12px}
+.room-card span{display:none}
+.briefing{margin-bottom:6px}
+.arena-frame{max-width:calc((100dvh - 96px) * 2);margin:0 auto}
+.control-strip{text-align:center}
+}
+@media(prefers-reduced-motion:reduce){.utility-button.is-ready{animation:none}}
+@media(max-width:680px) and (orientation:portrait){.masthead{flex-wrap:wrap;margin-bottom:14px}.utilities{max-width:none;width:100%;justify-content:flex-start;flex-wrap:nowrap}.room-card{margin-right:auto;padding-left:0}.room-card span{display:inline;margin:0 8px 0 0;white-space:nowrap}.room-card strong{white-space:nowrap;font-size:12px}}

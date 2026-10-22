@@ -41,7 +41,7 @@ jac test \
     tests/practice_tests.jac \
     -v
 
-node --test tests/playback_client.test.mjs tests/room_client.test.mjs tests/presentation_client.test.mjs
+node --test tests/playback_client.test.mjs tests/room_client.test.mjs tests/presentation_client.test.mjs tests/feel_client.test.mjs
 
 playwright_dir="${root}/.jac/e2e"
 if ! NODE_PATH="${playwright_dir}/node_modules" node -e "require.resolve('playwright')" >/dev/null 2>&1; then

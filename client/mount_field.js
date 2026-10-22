@@ -4,7 +4,7 @@
 // not integrate a shot or decide a hit.
 import { AUTO, Game, Scale } from "phaser";
 import "../assets/field.css";
-import { bodySize, pullFeedback, hudState, protocolPull, observationAt } from "./presentation.js";
+import { bodySize, pullFeedback, hudState, protocolPull, observationAt, trianglePoints, headingOf, easeOutBack, easeOutCubic, burst, stepShards, bannerFor, recordAfter, recordLabel } from "./presentation.js";
 import { isStale, releaseAllowed, sampleAt, stepWatch } from "./playback.js";
 
 const ARENA_W = 40;
@@ -12,6 +12,202 @@ const ARENA_H = 16;
 const VIEW_W = 800;
 const VIEW_H = 400;
 const PULL_HELP = "Drag back and release. Keyboard: Tab to field, arrows aim, Enter fires, Escape cancels.";
+const RECORD_KEY = "fogshot-record";
+const MAX_SHARDS = 220;
+
+function loadRecord() {
+    try { return JSON.parse(window.localStorage.getItem(RECORD_KEY) || "null"); } catch (err) { return null; }
+}
+
+function saveRecord(record) {
+    try { window.localStorage.setItem(RECORD_KEY, JSON.stringify(record)); } catch (err) { /* private mode */ }
+    const chip = document.getElementById("fogshot-record");
+    if (chip) chip.textContent = recordLabel(record);
+}
+
+// Canvas-pixel multiplier so overlay text stays legible when the 800px field is shown small.
+function uiScale(scene) {
+    const width = scene.fieldParent ? scene.fieldParent.clientWidth : VIEW_W;
+    return Math.min(2.4, Math.max(1, VIEW_W / Math.max(1, width)));
+}
+
+function spawn(scene, shards, palette) {
+    if (scene.reducedMotion) shards = shards.slice(0, Math.ceil(shards.length / 3)).map(s => ({ ...s, vx: s.vx * .3, vy: s.vy * .3 }));
+    for (const shard of shards) shard.color = palette[Math.floor(Math.random() * palette.length)];
+    scene.shards = scene.shards.concat(shards).slice(-MAX_SHARDS);
+}
+
+function shake(scene, duration, intensity) {
+    if (scene.reducedMotion || !scene.cameras || !scene.cameras.main) return;
+    scene.cameras.main.shake(duration, intensity);
+}
+
+function flash(scene, x, y, color, radius, life = .45) {
+    scene.flashes.push({ x, y, color, radius, life, age: 0 });
+}
+
+function showBanner(scene, banner, key) {
+    if (!banner) return;
+    scene.bannerKey = key;
+    scene.banner = { ...banner, started: scene.time.now, persistent: banner.kind !== "turn" };
+    const scale = uiScale(scene);
+    const tint = banner.kind === "defeat" ? "#f0a48a" : banner.kind === "victory" ? "#f4d58f" : "#dfeadf";
+    scene.bannerTitle.setText(banner.title).setColor(tint).setFontSize(Math.round(30 * Math.min(1.7, scale)));
+    scene.bannerSub.setText(banner.sub).setFontSize(Math.round(11 * scale)).setWordWrapWidth(660);
+}
+
+function dismissBanner(scene) {
+    if (scene.banner && !scene.banner.persistent && !scene.banner.leaving) scene.banner.leaving = scene.time.now;
+}
+
+// Impact of a server path's final sample: shards, flash and (for shells) a modest shake.
+function impact(scene, point, weapon, heading) {
+    if (weapon === "flare") {
+        spawn(scene, burst(point.x, point.y, { count: 16, speed: 70, life: 1.1, size: 3, heading: -Math.PI / 2, spread: Math.PI * 1.4 }), [0xd4edce, 0xf0e9c8, 0xa9d6c2]);
+        flash(scene, point.x, point.y, 0xd4edce, 46, .7);
+        return;
+    }
+    const back = heading === null ? -Math.PI / 2 : heading + Math.PI;
+    spawn(scene, burst(point.x, point.y, { count: 22, speed: 170, life: .8, size: 4.5, heading: back, spread: Math.PI * 1.3 }), [0xf2cb78, 0xe5b56c, 0xfff3d4, 0x8fa9a0]);
+    flash(scene, point.x, point.y, 0xf2cb78, 34, .4);
+    shake(scene, 150, .005);
+}
+
+// Per-frame effects layer. Everything here is cosmetic and redrawn from scratch.
+function animate(scene, time, delta) {
+    const fx = scene.fxPen;
+    if (!fx) return;
+    const dt = Math.min(.05, (delta || 16) / 1000);
+    const t = time / 1000;
+    fx.clear();
+    // Sine-drifting fog wisps over the hidden half (mirrored for seat B).
+    if (scene.wisps) {
+        const flip = scene.seat === "B";
+        scene.wisps.forEach((wisp, i) => {
+            const drift = scene.reducedMotion ? 0 : Math.sin(t * wisp.speed + wisp.phase) * wisp.amp;
+            const x = wisp.baseX + drift;
+            wisp.image.setPosition(flip ? VIEW_W - x : x, wisp.baseY + (scene.reducedMotion ? 0 : Math.sin(t * wisp.speed * 1.7 + i) * 4));
+            wisp.image.setAlpha(scene.reducedMotion ? wisp.alpha : wisp.alpha * (.75 + .25 * Math.sin(t * .6 + wisp.phase)));
+        });
+    }
+    const launch = scene.launch || launcherOf(scene);
+    const finished = scene.fieldParent && scene.fieldParent.dataset.phase === "finished";
+    // Your-turn beacon: a breathing ring and three orbiting chevrons around the launcher.
+    if (scene.yourTurn && !finished) {
+        const breathe = scene.reducedMotion ? .5 : .5 + .5 * Math.sin(t * 3.2);
+        fx.lineStyle(2, 0xf1d18b, .25 + .35 * breathe);
+        fx.strokeCircle(launch.x, launch.y, 26 + breathe * 5);
+        if (!scene.reducedMotion && !scene.activePull) {
+            for (let k = 0; k < 3; k++) {
+                const a = t * 1.4 + k * (Math.PI * 2 / 3);
+                const r = 36;
+                const [n, l, rr] = trianglePoints(launch.x + Math.cos(a) * r, launch.y + Math.sin(a) * r, 4, a + Math.PI / 2);
+                fx.fillStyle(0xf1d18b, .55); fx.fillTriangle(n.x, n.y, l.x, l.y, rr.x, rr.y);
+            }
+        }
+    }
+    // First-shot coaching: a ghost pull eases back from the launcher until the first drag.
+    if (scene.yourTurn && !scene.activePull && scene.coach && !finished) {
+        const dir = scene.seat === "B" ? 1 : -1;
+        const cycle = scene.reducedMotion ? .8 : (t % 1.6) / 1.6;
+        const e = easeOutCubic(Math.min(1, cycle / .75));
+        const gx = launch.x + dir * 62 * e, gy = launch.y + 30 * e;
+        const fade = cycle > .8 ? 1 - (cycle - .8) / .2 : 1;
+        fx.lineStyle(1.5, 0xf1d18b, .5 * fade);
+        fx.lineBetween(launch.x, launch.y, gx, gy);
+        fx.fillStyle(0xf1d18b, .9 * fade); fx.fillCircle(gx, gy, 5);
+        fx.lineStyle(1, 0xf1d18b, .4 * fade); fx.strokeCircle(gx, gy, 9 + 4 * e);
+        const half = scene.coachLabel.width / 2 + 6;
+        const lx = Math.min(VIEW_W - half, Math.max(half, launch.x + dir * 66));
+        scene.coachLabel.setVisible(true).setPosition(lx, launch.y - 22 - 4 * uiScale(scene)).setAlpha(.6 + .4 * fade);
+    } else if (scene.coachLabel) {
+        scene.coachLabel.setVisible(false);
+    }
+    // Aim chevrons: triangles rotated to the launch angle, pulsing outward with a sine wave.
+    const pull = scene.activePull;
+    if (pull) {
+        const aim = pullFeedback(scene.seat, pull);
+        const heading = -aim.angle; // world y-up angle -> screen y-down angle
+        const color = aim.valid ? 0xf1d18b : 0xb98472;
+        aim.guide.forEach((point, n) => {
+            const wave = scene.reducedMotion ? .6 : .5 + .5 * Math.sin(t * 9 - n * .9);
+            const [a, b, c] = trianglePoints(point.x, point.y, 2.6 + wave * 1.6 + aim.pullFraction * 1.2, heading);
+            fx.fillStyle(color, .45 + .55 * wave); fx.fillTriangle(a.x, a.y, b.x, b.y, c.x, c.y);
+        });
+        const pct = Math.round(aim.pullFraction * 100);
+        const degrees = Math.round(aim.angle * 180 / Math.PI);
+        scene.aimLabel.setVisible(true).setFontSize(Math.round(10 * uiScale(scene)))
+            .setText(aim.valid ? `${pct}%  ${degrees}°` : "AIM FORWARD")
+            .setColor(aim.valid ? "#f1d18b" : "#e0a08e")
+            .setPosition(launch.x, launch.y - 44 - 4 * uiScale(scene));
+    } else if (scene.aimLabel) {
+        scene.aimLabel.setVisible(false);
+    }
+    // Fading comet trail behind the shell.
+    if (scene.trail && scene.trail.length > 1 && !scene.landed) {
+        for (let i = 1; i < scene.trail.length; i++) {
+            const a = scene.trail[i - 1], b = scene.trail[i];
+            const k = i / scene.trail.length;
+            fx.lineStyle(1 + k * 4, (scene.pathWeapon || scene.weapon) === "flare" ? 0xd4edce : 0xf2cb78, k * .45);
+            fx.lineBetween(a.x, a.y, b.x, b.y);
+        }
+    }
+    // Launch recoil ring.
+    if (scene.recoil !== null && scene.recoil !== undefined) {
+        const age = (time - scene.recoil) / 1000;
+        if (age < .35) {
+            fx.lineStyle(3 * (1 - age / .35), 0xf1d18b, 1 - age / .35);
+            fx.strokeCircle(launch.x, launch.y, 10 + easeOutCubic(age / .35) * 30);
+        } else scene.recoil = null;
+    }
+    // Flashes and triangle shards.
+    scene.flashes = scene.flashes.filter(f => (f.age += dt) < f.life);
+    for (const f of scene.flashes) {
+        const k = f.age / f.life;
+        fx.fillStyle(f.color, (1 - k) * .35); fx.fillCircle(f.x, f.y, f.radius * easeOutCubic(k));
+        fx.lineStyle(2, f.color, (1 - k) * .8); fx.strokeCircle(f.x, f.y, f.radius * (.4 + easeOutCubic(k)));
+    }
+    if (scene.shards.length) {
+        scene.shards = stepShards(scene.shards, dt);
+        for (const s of scene.shards) {
+            const [a, b, c] = trianglePoints(s.x, s.y, s.size, s.rot);
+            fx.fillStyle(s.color, Math.max(0, 1 - s.age / s.life));
+            fx.fillTriangle(a.x, a.y, b.x, b.y, c.x, c.y);
+        }
+    }
+    // Banner: pops in with a back-eased scale, turn banners fade after a beat.
+    const banner = scene.banner;
+    if (banner) {
+        const age = (time - banner.started) / 1000;
+        let alpha = Math.min(1, age / .2);
+        if (!banner.persistent && age > 1.8 && !banner.leaving) banner.leaving = time;
+        if (banner.leaving) alpha = Math.max(0, 1 - (time - banner.leaving) / 350);
+        if (alpha <= 0 && banner.leaving) {
+            scene.banner = null;
+            scene.bannerTitle.setVisible(false); scene.bannerSub.setVisible(false);
+        } else {
+            const pop = scene.reducedMotion ? 1 : easeOutBack(Math.min(1, age / .45));
+            const y = banner.persistent ? 150 : 88;
+            scene.bannerTitle.setVisible(true).setAlpha(alpha).setScale(pop).setPosition(VIEW_W / 2, y);
+            scene.bannerSub.setVisible(true).setAlpha(alpha).setPosition(VIEW_W / 2, y + scene.bannerTitle.displayHeight / 2 + scene.bannerSub.height / 2 + 4);
+            const w = Math.max(scene.bannerTitle.displayWidth, scene.bannerSub.width) + 48;
+            const h = scene.bannerTitle.displayHeight + scene.bannerSub.height + 22;
+            fx.fillStyle(0x081a22, .72 * alpha);
+            fx.fillRoundedRect(VIEW_W / 2 - w / 2, y - scene.bannerTitle.displayHeight / 2 - 9, w, h, 8);
+            const edge = banner.kind === "defeat" ? 0xf0a48a : banner.kind === "victory" ? 0xf4d58f : 0x8fc5b6;
+            fx.lineStyle(1, edge, .6 * alpha);
+            fx.strokeRoundedRect(VIEW_W / 2 - w / 2, y - scene.bannerTitle.displayHeight / 2 - 9, w, h, 8);
+            if (banner.persistent && !scene.reducedMotion) {
+                // Slow rotating triangle crest on either side of the result.
+                for (const side of [-1, 1]) {
+                    const cx = VIEW_W / 2 + side * (w / 2 + 18), spin = t * 1.2 * side;
+                    const [a, b, c] = trianglePoints(cx, y, 9, spin);
+                    fx.lineStyle(1.5, edge, .8 * alpha); fx.strokeTriangle(a.x, a.y, b.x, b.y, c.x, c.y);
+                }
+            }
+        }
+    }
+}
 
 function worldToScreen(x, y) {
     return {
@@ -107,8 +303,6 @@ function drawLauncher(pen, scene, pull) {
     pen.fillStyle(scene.powered ? 0xa5ceaf : 0x6b7973, 1);
     pen.fillCircle(launch.x + direction * 22, launch.y + 29, 3);
     if (aim) {
-        pen.fillStyle(aim.valid ? 0xf1d18b : 0xb98472, 1);
-        for (const point of aim.guide) pen.fillCircle(point.x, point.y, 2);
         pen.lineStyle(2, aim.valid ? 0xf1d18b : 0xb98472, .9);
         pen.beginPath(); pen.arc(launch.x, launch.y, 29, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * aim.pullFraction); pen.strokePath();
     }
@@ -162,7 +356,14 @@ function paint(scene, pull) {
     drawBodies(pen, ownBodies(scene.view), true, scene);
     drawBodies(pen, revealedBodies(scene.view), false, scene);
     drawLauncher(pen, scene, pull);
-    if (scene.shot) {
+    if (scene.shot && !scene.landed) {
+        const heading = scene.heading;
+        if (heading !== null && heading !== undefined) {
+            const back = { x: scene.shot.x - Math.cos(heading) * 15, y: scene.shot.y - Math.sin(heading) * 15 };
+            const nx = -Math.sin(heading) * 4, ny = Math.cos(heading) * 4;
+            pen.fillStyle(scene.weapon === "flare" ? 0xd4edce : 0xf2cb78, .5);
+            pen.fillTriangle(scene.shot.x + nx, scene.shot.y + ny, scene.shot.x - nx, scene.shot.y - ny, back.x, back.y);
+        }
         if (!scene.reducedMotion) {
             pen.fillStyle(0xf2cb78, .12); pen.fillCircle(scene.shot.x, scene.shot.y, 15);
             pen.fillStyle(0xf2cb78, .2); pen.fillCircle(scene.shot.x, scene.shot.y, 9);
@@ -181,14 +382,17 @@ function paint(scene, pull) {
     }
     const origin = launcherOf(scene);
     scene.launchLabel.setPosition(origin.x, origin.y + 49);
-    scene.launchLabel.setText(scene.yourTurn ? "PULL TO FIRE" : "STAND BY");
+    const phase = scene.fieldParent ? scene.fieldParent.dataset.phase : "";
+    const botThinking = scene.fieldParent && scene.fieldParent.dataset.botThinking === "true";
+    scene.launchLabel.setText(phase === "finished" ? "DUEL OVER" : scene.yourTurn ? "PULL TO FIRE" : botThinking ? "BOT AIMING" : "STAND BY");
+    scene.activePull = pull || null;
 }
 
 function renderHud(data) {
     const status = hudState(data);
     const put = (id, text) => { const element = document.getElementById(id); if (element && element.textContent !== text) element.textContent = text; };
     const rematch = document.getElementById("fogshot-rematch");
-    if (rematch) { rematch.disabled = data.phase !== "finished"; rematch.title = data.phase === "finished" ? "Play another duel" : "Available after the duel"; }
+    if (rematch) { rematch.disabled = data.phase !== "finished"; rematch.title = data.phase === "finished" ? "Play another duel (R)" : "Available after the duel"; rematch.classList.toggle("is-ready", data.phase === "finished"); }
     put("fogshot-room", data.mode === "practice" ? "Practice bot" : data.room || "------");
     put("fogshot-turn", status.turn);
     put("fogshot-weapon", status.weapon);
@@ -321,7 +525,28 @@ export function mountField(parent) {
                 }
                 fog.refresh();
                 this.fogBank = this.add.image(0, 0, "fog-bank").setOrigin(0);
+                const wisp = this.textures.createCanvas("fog-wisp", 320, 110);
+                const wctx = wisp.context;
+                // Soft blurred ellipses; the padding keeps the blur from clipping into hard edges.
+                wctx.filter = "blur(14px)";
+                wctx.fillStyle = "rgba(150,182,178,.42)";
+                wctx.beginPath(); wctx.ellipse(160, 58, 112, 17, 0, 0, Math.PI * 2); wctx.fill();
+                wctx.fillStyle = "rgba(170,198,190,.3)";
+                wctx.beginPath(); wctx.ellipse(120, 50, 60, 11, -.06, 0, Math.PI * 2); wctx.fill();
+                wisp.refresh();
+                this.wisps = [[540, 120, .23, 40, .38], [660, 215, .17, 55, .46], [500, 300, .29, 35, .4], [700, 345, .21, 45, .34]].map(([x, y, speed, amp, alpha], i) => ({
+                    image: this.add.image(x, y, "fog-wisp").setAlpha(alpha), baseX: x, baseY: y, speed, amp, alpha, phase: i * 1.9,
+                }));
                 this.fogPen = this.add.graphics();
+                this.fxPen = this.add.graphics();
+                this.shards = []; this.flashes = []; this.trail = []; this.banner = null; this.bannerKey = "";
+                this.heading = null; this.landed = false; this.recoil = null; this.activePull = null; this.coach = true;
+                const bannerFont = { fontFamily: "Inter, 'Segoe UI', Arial, sans-serif", fontStyle: "bold", resolution: 2, align: "center" };
+                this.bannerTitle = this.add.text(VIEW_W / 2, 90, "", { ...bannerFont, fontSize: "30px", color: "#f4d58f" }).setOrigin(.5).setVisible(false);
+                this.bannerTitle.setLetterSpacing && this.bannerTitle.setLetterSpacing(4);
+                this.bannerSub = this.add.text(VIEW_W / 2, 120, "", { ...bannerFont, fontStyle: "normal", fontSize: "11px", color: "#c9d8cf" }).setOrigin(.5).setVisible(false);
+                this.aimLabel = this.add.text(0, 0, "", { ...bannerFont, fontSize: "10px", color: "#f1d18b", backgroundColor: "#0c222bcc", padding: { x: 5, y: 2 } }).setOrigin(.5).setVisible(false);
+                this.coachLabel = this.add.text(0, 0, "DRAG BACK", { ...bannerFont, fontSize: "9px", color: "#f1d18b" }).setOrigin(.5).setVisible(false);
                 const labelStyle = { fontFamily: "Arial", fontSize: "9px", color: "#b8d6c6", backgroundColor: "#102a34", padding: { x: 5, y: 3 }, resolution: 2 };
                 this.coreLabel = this.add.text(0, 0, "", labelStyle).setOrigin(.5);
                 this.launchLabel = this.add.text(0, 0, "", { ...labelStyle, fontSize: "8px", color: "#dfd6ac" }).setOrigin(.5);
@@ -330,6 +555,7 @@ export function mountField(parent) {
                     const size = Math.max(9, 10 / Math.max(.2, parent.clientWidth / VIEW_W));
                     this.coreLabel.setFontSize(size);
                     this.launchLabel.setFontSize(size);
+                    this.coachLabel.setFontSize(Math.round(9 * uiScale(this)));
                     if (this.view) paint(this, pull);
                 };
                 this.scale.on("resize", resizeLabels);
@@ -409,6 +635,8 @@ export function mountField(parent) {
                     resetPullHint();
                     activeId = pointer.id;
                     pull = { x: pointer.x, y: pointer.y };
+                    this.coach = false;
+                    dismissBanner(this);
                     paint(this, pull);
                 });
                 this.input.on(handlers[1], (pointer) => {
@@ -430,7 +658,8 @@ export function mountField(parent) {
                     finishPull(pointer, true);
                 });
             },
-            update(time) {
+            update(time, delta) {
+                animate(this, time, delta);
                 const path = this.path;
                 if (!path || !path.length) {
                     if (this.effectLive) paint(this, pull);
@@ -450,8 +679,21 @@ export function mountField(parent) {
                 }
                 const elapsed = (time - this.pathStart) / 1000;
                 const point = sampleAt(path, elapsed, 2, false);
+                const last = path[path.length - 1];
+                if (!this.landed && point && elapsed >= (last.length > 2 ? last[2] : 0)) {
+                    // The server path ended: land it with an impact instead of parking the shell.
+                    this.landed = true;
+                    impact(this, worldToScreen(last[0], last[1]), this.pathWeapon || this.weapon, this.heading);
+                }
                 if (point) {
-                    this.shot = worldToScreen(point[0], point[1]);
+                    const next = worldToScreen(point[0], point[1]);
+                    const heading = headingOf(this.shot, next);
+                    if (heading !== null) this.heading = heading;
+                    if (!this.landed && (!this.trail.length || headingOf(this.trail[this.trail.length - 1], next, 1.5) !== null)) {
+                        this.trail.push(next);
+                        if (this.trail.length > 16) this.trail.shift();
+                    }
+                    this.shot = next;
                     if (parent) {
                         parent.dataset.shotScreenX = String(this.shot.x);
                         parent.dataset.shotTime = String(point[2]);
@@ -485,6 +727,8 @@ export function mountField(parent) {
             return;
         }
         if (!keyboardPull) cancelGesture();
+        sceneRef.coach = false;
+        dismissBanner(sceneRef);
         keyboardPull ||= { x: sceneRef.seat === "B" ? 780 : 20, y: 340 };
         if (event.key === "ArrowLeft") keyboardPull.x = Math.max(0, keyboardPull.x - 4);
         if (event.key === "ArrowRight") keyboardPull.x = Math.min(799, keyboardPull.x + 4);
@@ -497,6 +741,15 @@ export function mountField(parent) {
         if (hint) hint.textContent = aim.valid ? `Pull ${Math.round(aim.pullFraction * 100)}%. Enter to launch, Escape to cancel.` : "Adjust the pull behind the launcher.";
     };
     parent.addEventListener("keydown", onKey);
+    const onRematchKey = (event) => {
+        if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || (event.key !== "r" && event.key !== "R")) return;
+        const target = event.target;
+        if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
+        const rematch = document.getElementById("fogshot-rematch");
+        if (parent.dataset.phase === "finished" && rematch && !rematch.disabled) { event.preventDefault(); rematch.click(); }
+    };
+    window.addEventListener("keydown", onRematchKey);
+    saveRecord(loadRecord() || {});
     const onBlur = () => cancelGesture();
     window.addEventListener("blur", onBlur);
     const onVisible = () => { if (!document.hidden && sceneRef) paint(sceneRef, pull); };
@@ -506,6 +759,7 @@ export function mountField(parent) {
     return {
         destroy() {
             parent.removeEventListener("keydown", onKey);
+            window.removeEventListener("keydown", onRematchKey);
             window.removeEventListener("blur", onBlur);
             document.removeEventListener("visibilitychange", onVisible);
             if (sceneRef && sceneRef.revealTimer) clearTimeout(sceneRef.revealTimer);
@@ -550,6 +804,37 @@ export function mountField(parent) {
                 sceneRef.revision = data.revision;
             }
             if (epochChanged || (sceneRef.yourTurn && !data.your_turn)) cancelGesture();
+            const before = sceneRef.lastData;
+            sceneRef.lastData = data;
+            if (epochChanged) { sceneRef.shards = []; sceneRef.flashes = []; sceneRef.trail = []; sceneRef.landed = false; sceneRef.banner = null; sceneRef.bannerKey = ""; sceneRef.bannerTitle.setVisible(false); sceneRef.bannerSub.setVisible(false); }
+            if (data.phase === "recon" && Number(data.turn || 0) === 0 && data.your_turn) sceneRef.coach = sceneRef.coach || epochChanged;
+            else sceneRef.coach = false;
+            const sameDuel = before && !epochChanged && before.epoch === data.epoch;
+            if (sameDuel && before.own_core !== false && data.own_core === false) {
+                const core = (data.view && data.view.own || []).find(body => body.role === "core");
+                if (core) {
+                    const at = worldToScreen(core.x, core.y);
+                    spawn(sceneRef, burst(at.x, at.y, { count: 34, speed: 210, life: 1.1, size: 5 }), [0xf0cb7b, 0xf0a48a, 0x8fc5b6, 0xfff3d4]);
+                    flash(sceneRef, at.x, at.y, 0xf0a48a, 60, .7);
+                }
+                shake(sceneRef, 260, .009);
+            }
+            if (sameDuel && Number(before.enemy_cores) > Number(data.enemy_cores)) {
+                const at = data.reveal_radius > 0 ? worldToScreen(data.reveal_x, data.reveal_y) : { x: VIEW_W * .25, y: VIEW_H * .7 };
+                spawn(sceneRef, burst(at.x, at.y, { count: 30, speed: 200, life: 1.1, size: 5 }), [0xf2cb78, 0xe5b56c, 0xfff3d4]);
+                flash(sceneRef, at.x, at.y, 0xf2cb78, 60, .7);
+                shake(sceneRef, 220, .007);
+            }
+            const banner = bannerFor(data);
+            const bannerKey = banner ? `${data.epoch}:${banner.kind === "turn" ? data.turn : "end"}:${banner.kind}` : "";
+            if (banner && bannerKey !== sceneRef.bannerKey) {
+                showBanner(sceneRef, banner, bannerKey);
+                if (banner.kind === "victory" && sameDuel && before.phase !== "finished" && !sceneRef.reducedMotion) {
+                    // Triangle confetti cascading from the top edge.
+                    for (let i = 0; i < 5; i++) spawn(sceneRef, burst(VIEW_W * (.15 + i * .175), -6, { count: 10, speed: 90, heading: Math.PI / 2, spread: 1.6, life: 2.2, size: 4 }), [0xf4d58f, 0x8fc5b6, 0xe5b56c, 0xf0e9c8]);
+                }
+            } else if (!banner) dismissBanner(sceneRef);
+            if (data.result && data.seat) saveRecord(recordAfter(loadRecord(), data, `${data.room || parent.dataset.room || ""}:${data.epoch}`));
             sceneRef.view = data.view || sceneRef.view;
             sceneRef.yourTurn = Boolean(data.your_turn);
             sceneRef.weapon = data.weapon || sceneRef.weapon;
@@ -585,6 +870,18 @@ export function mountField(parent) {
             }, data, elapsed);
             if (frame.path !== sceneRef.path) {
                 sceneRef.pathStart = frame.path ? now : null;
+                sceneRef.trail = []; sceneRef.landed = false; sceneRef.heading = null; sceneRef.shot = null;
+                sceneRef.pathWeapon = data.weapon || sceneRef.weapon;
+                if (frame.path && frame.path.length) {
+                    const origin = worldToScreen(frame.path[0][0], frame.path[0][1]);
+                    const launch = launcherOf(sceneRef);
+                    if (Math.hypot(origin.x - launch.x, origin.y - launch.y) < 60) {
+                        sceneRef.recoil = now;
+                        const second = frame.path[Math.min(frame.path.length - 1, 3)];
+                        const toward = headingOf(origin, worldToScreen(second[0], second[1]), .01);
+                        spawn(sceneRef, burst(launch.x, launch.y, { count: 9, speed: 90, life: .45, size: 3, heading: toward === null ? -Math.PI / 4 : toward, spread: 1.1 }), [0xf1d18b, 0xd8c48b, 0xfff3d4]);
+                    }
+                }
             }
             sceneRef.path = frame.path;
             sceneRef.collapse = frame.collapse;

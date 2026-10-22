@@ -1,5 +1,9 @@
 # Build status
 
+## Playtest and game-feel pass - 2026-10-21
+
+Branch `polish/playtest-pass` from main `1ac71b9`. Scripted practice playtests at 1280x800 and 390x844 (touch) found a console 400 on every reload (signup before login), a landscape-phone field that ran off screen, near-invisible win/loss states and shells that parked instead of landing. All are fixed. Trig-driven presentation polish adds triangle chevrons, atan2-oriented shells and shards, sine fog wisps and pulses, result banners, R-to-rematch and a local record/streak. Server authority, physics, bot and privacy projection are unchanged. Full `scripts/verify.sh` (65 Jac, 22 Node, 4 browser suites) and `scripts/verify-sealed.sh` passed locally. See [the playtest report](PLAYTEST-POLISH-2026-10-21.md). Not merged, not deployed.
+
 ## First-play controls visibility - 2026-10-15
 
 A separate branch based on frozen PR9 head `238e8b5` fixes hidden keyboard aim help and damaged startup placeholders. The existing hint is visible below the field, linked to its accessible description, and resets when aiming ends or the turn changes. Existing Practice, objectives, Rematch and Multiplayer behavior is preserved.
