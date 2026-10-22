@@ -6,8 +6,9 @@ that seed and shrinks as the streak grows and as the bot keeps firing in a duel.
 """
 import json;
 import math;
-import from game.aim { release_pull }
-import from game.layout { make_rng }
+import from game.aim { release_pull, release_long, long_pointer, LONG_V_MAX }
+import from game.layout { Rng, make_rng, ground_at }
+import from game.longrange { free_flight }
 
 def new_memory(epoch: int) -> str {
     return json.dumps({"epoch": epoch, "targets": []});
@@ -36,7 +37,8 @@ def learn(observation: str, memory: str, now_ms: int) -> str {
         if role not in ["core", "post", "spur"] or not bool(row.get("alive", False)) {
             continue;
         }
-        if not math.isfinite(x) or not math.isfinite(y) or x < 0.0 or x > 40.0 or y < 0.0 or y > 16.0 {
+        field = data.get("field", {}) or {};
+        if not math.isfinite(x) or not math.isfinite(y) or x < 0.0 or x > float(field.get("w", 40.0)) or y < 0.0 or y > float(field.get("h", 16.0)) {
             continue;
         }
         # A coarse remembered point, not an exact silhouette, id, health or live tracker.
@@ -126,6 +128,10 @@ def choose(observation: str, memory: str, skill: str = "{}") -> str {
     spot = _launcher(data);
     lx = spot[0];
     ly = spot[1];
+    field = data.get("field", {}) or {};
+    if str(field.get("mode", "classic")) == "long" {
+        return _choose_long(data, targets, streak, rng, phase, turn, lx, ly, float(field.get("w", 160.0)));
+    }
     # Pointer range behind this launcher, in seat B's mirrored canvas coordinates.
     back = max(12.0, (40.0 - lx) * 20.0 - 10.0);
     low = min(390.0, max(300.0, (1.0 - ly / 16.0) * 400.0));
@@ -172,4 +178,87 @@ def choose(observation: str, memory: str, skill: str = "{}") -> str {
     }
     weapon = "flare" if phase == "recon" else "shell";
     return json.dumps({"ready": True, "weapon": weapon, "x": px, "y": py});
+}
+
+# Long range: angle/speed error shrinks with the human's streak and with each shell fired.
+def long_sigma(streak: int, shells_fired: int) -> tuple[float, float] {
+    ramp = math.pow(0.7, float(max(0, streak))) * math.pow(0.75, float(max(0, shells_fired)));
+    return (max(0.002, 0.03 * ramp), max(0.1, 1.6 * ramp));
+}
+
+# Public-ground ballistics only: the speed at `degrees` (seat-B pad angle) that lands at tx.
+def _solve_long(terrain: list[list[float]], lx: float, ly: float, tx: float, degrees: float) -> float {
+    angle = math.pi - math.radians(degrees);
+    far = free_flight(terrain, lx, ly, angle, LONG_V_MAX);
+    if far[1] > tx {
+        return -1.0;
+    }
+    lo = 0.15;
+    hi = 1.0;
+    for _ in range(16) {
+        mid = (lo + hi) / 2.0;
+        land = free_flight(terrain, lx, ly, angle, mid * LONG_V_MAX);
+        if land[1] > tx {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    speed = (lo + hi) / 2.0 * LONG_V_MAX;
+    land = free_flight(terrain, lx, ly, angle, speed);
+    # A hill in the way stops the shell short; try another angle.
+    if abs(land[1] - tx) > 2.5 {
+        return -1.0;
+    }
+    return speed;
+}
+
+def _choose_long(data: any, targets: list[any], streak: int, rng: Rng, phase: str, turn: int, lx: float, ly: float, width: float) -> str {
+    terrain: list[list[float]] = data.get("terrain", []) or [];
+    if len(terrain) < 2 {
+        return json.dumps({"ready": False});
+    }
+    # Seat A's launcher mirrors this one; generated outposts dig in 14-40 m in front of it.
+    enemy_x = width - lx;
+    tx = enemy_x + rng.uniform(12.0, 42.0);
+    target: any = None;
+    for row in targets {
+        target = row;
+        if str(row["role"]) == "core" {
+            break;
+        }
+    }
+    known = phase == "combat" and target is not None;
+    if known {
+        tx = float(target["x"]);
+    }
+    order = [45.0, 40.0, 50.0, 35.0, 55.0, 60.0, 30.0, 65.0, 25.0];
+    start = rng.pick(0, 2);
+    degrees = 45.0;
+    speed = -1.0;
+    for index in range(len(order)) {
+        pick = order[(index + start) % len(order)] if index < 3 else order[index];
+        speed = _solve_long(terrain, lx, ly, tx, pick);
+        if speed > 0.0 {
+            degrees = pick;
+            break;
+        }
+    }
+    if speed <= 0.0 {
+        speed = LONG_V_MAX * 0.9;
+        degrees = 45.0;
+    }
+    shells = max(0, (turn - 3) // 2);
+    sigma = long_sigma(streak, shells);
+    if not known {
+        sigma = (0.012, 0.6);
+    }
+    frac = max(0.1, min(1.0, speed / LONG_V_MAX + rng.gauss() * sigma[0]));
+    degrees = max(10.0, min(74.0, degrees + rng.gauss() * sigma[1]));
+    pointer = long_pointer("B", math.pi - math.radians(degrees), frac * LONG_V_MAX);
+    if not release_long("B", pointer[0], pointer[1], 800.0, 400.0, 1.0, True, False, False).fired {
+        pointer = long_pointer("B", math.pi - math.radians(45.0), 0.9 * LONG_V_MAX);
+    }
+    weapon = "flare" if phase == "recon" else "shell";
+    return json.dumps({"ready": True, "weapon": weapon, "x": pointer[0], "y": pointer[1]});
 }

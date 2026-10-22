@@ -38,7 +38,8 @@ def accept_shot(
     turn: int,
     weapon: str,
     angle: float,
-    power: float
+    power: float,
+    max_power: float = MAX_POWER
 ) -> ShotDecision {
     if state.phase == "finished" or state.result != "" {
         return ShotDecision(ok=False, code="finished", state=state);
@@ -55,7 +56,7 @@ def accept_shot(
     if not math.isfinite(angle) or not math.isfinite(power) {
         return ShotDecision(ok=False, code="nonfinite", state=state);
     }
-    if power < MIN_POWER or power > MAX_POWER {
+    if power < MIN_POWER or power > max_power {
         return ShotDecision(ok=False, code="power", state=state);
     }
     if not angle_ok(actor, angle) {

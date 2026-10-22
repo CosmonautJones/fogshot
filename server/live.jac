@@ -3,8 +3,9 @@
 import json;
 import math;
 import from pathlib { Path }
-import from game.aim { launcher_for, release_pull }
+import from game.aim { launcher_for, release_pull, release_long, LONG_W, LONG_H, LONG_PAD_X, LONG_PAD_Y, LONG_FULL_PULL, LONG_MIN_PULL, LONG_V_MAX, LONG_DRAG, LONG_SHELL_R, LONG_BLAST_R, LONG_STEPS }
 import from game.layout { build_world, fresh_ridge, generate, ridge_name, server_secret }
+import from game.longrange { build_long, generate_long, is_long }
 import from game.practice_bot { choose, learn, new_memory }
 import from game.rules { MatchRules, accept_shot, copy_rules, resolve_cores }
 import from graph.supply { Cable, Site, assess }
@@ -200,9 +201,27 @@ def _public_terrain(live: LiveMatch) -> list[list[float]] {
     return live.layout["terrain"];
 }
 
+def _long(live: LiveMatch) -> bool {
+    return is_long(live.layout);
+}
+
+def _field_width(live: LiveMatch) -> float {
+    return LONG_W if _long(live) else 40.0;
+}
+
+# Public field facts the client needs to scale, aim and preview; nothing hidden.
+def _field(live: LiveMatch) -> dict[str, any] {
+    if not _long(live) {
+        return {"mode": "classic", "w": 40.0, "h": 16.0};
+    }
+    return {"mode": "long", "w": LONG_W, "h": LONG_H, "pad_x": LONG_PAD_X, "pad_y": LONG_PAD_Y,
+        "full_pull": LONG_FULL_PULL, "min_pull": LONG_MIN_PULL, "v_max": LONG_V_MAX,
+        "gravity": 9.81, "drag": LONG_DRAG, "shell": LONG_SHELL_R, "blast": LONG_BLAST_R};
+}
+
 def _arm_generated(live: LiveMatch) -> None {
     layout = live.layout;
-    live.world = build_world(layout, True);
+    live.world = build_long(layout, True) if is_long(layout) else build_world(layout, True);
     live.core_a_alive = True;
     live.core_b_alive = True;
     la = _launcher(live, "A");
@@ -220,7 +239,8 @@ def _arm_generated(live: LiveMatch) -> None {
         ));
     }
     secrets.append(SecretBody(id="sentinel", owner="hidden", x=12345.67, y=-9876.54, w=1.0, h=1.0, angle=0.2, role="objective", alive=True, health=9.0));
-    secrets.append(SecretBody(id="ground", owner="public", x=20.0, y=0.0, w=44.0, h=0.1, angle=0.0, role="ground", alive=True, health=1.0));
+    span = _field_width(live);
+    secrets.append(SecretBody(id="ground", owner="public", x=span / 2.0, y=0.0, w=span + 4.0, h=0.1, angle=0.0, role="ground", alive=True, health=1.0));
     live.table.secrets = secrets;
     _sync_post(live);
 }
@@ -257,7 +277,8 @@ def _generate_ridge(ridge: int) -> any {
     secret = server_secret(ROOM_ROOT);
     wanted = ridge if ridge > 0 else fresh_ridge();
     for attempt in range(6) {
-        layout = generate(wanted, secret);
+        # Every generated ridge is a long-range artillery field; ridge 0 stays the classic lob.
+        layout = generate_long(wanted, secret);
         if len(layout) > 0 {
             return layout;
         }
@@ -701,6 +722,14 @@ def _reveal_on(live: LiveMatch, outcome: SimOutcome, seat: str, now_ms: int, wea
     }
     live.reveal_seat = seat;
     live.reveal_until = server_now() + 3000;
+    if _long(live) {
+        # Long flights play back at 1.6x; keep the patch open through the flight and 3.5 s after.
+        flight = live.world.blast_step if live.world.blast_step >= 0 else live.world.impact_step;
+        flight_ms = int(float(max(0, flight)) * live.world.dt * 1000.0 / 1.6);
+        live.reveal_until = server_now() + flight_ms + 3500;
+        live.reveal_radius = 6.0 if weapon == "flare" else (4.5 if _powered(live, seat) else 3.5);
+        return;
+    }
     if weapon == "flare" {
         live.reveal_radius = 3.0;
     } elif _powered(live, seat) {
@@ -728,14 +757,20 @@ def _bound(points: list[list[float]], limit: int) -> list[list[float]] {
         return points;
     }
     kept: list[list[float]] = [];
-    step = len(points) // limit;
-    if step < 1 {
-        step = 1;
-    }
+    # Ceiling step so the whole flight is covered, and the final sample (the landing) is kept.
+    step = max(1, (len(points) + limit - 1) // limit);
     index = 0;
     while index < len(points) and len(kept) < limit {
         kept.append(points[index]);
         index = index + step;
+    }
+    last = points[len(points) - 1];
+    if kept[len(kept) - 1] != last {
+        if len(kept) >= limit {
+            kept[len(kept) - 1] = last;
+        } else {
+            kept.append(last);
+        }
     }
     return kept;
 }
@@ -751,7 +786,7 @@ def _path_of(live: LiveMatch) -> list[list[float]] {
         ]);
         index = index + 3;
     }
-    return _bound(points, 80);
+    return _bound(points, 120 if _long(live) else 80);
 }
 
 def _series_for(live: LiveMatch, body_id: str) -> list[list[float]] {
@@ -821,14 +856,18 @@ def _filtered_path(live: LiveMatch, seat: str) -> list[list[float]] {
     if seat == "" or not _window_open(live) {
         return points;
     }
+    mid = _field_width(live) / 2.0;
+    # Long range: a shell bursts on first contact, so its free flight is public aim plus the
+    # revealed burst point; the shooter follows the whole arc. The defender still sees only home.
+    shooter = _long(live) and seat == live.reveal_seat;
     for point in live.shot_path {
         x = point[0];
         y = point[1];
-        home = False;
-        if seat == "A" and x <= 20.0 {
+        home = shooter;
+        if seat == "A" and x <= mid {
             home = True;
         }
-        if seat == "B" and x >= 20.0 {
+        if seat == "B" and x >= mid {
             home = True;
         }
         if home or (seat == live.reveal_seat and _in_reveal(live, x, y)) {
@@ -911,7 +950,8 @@ def _encode(
         "view": json.loads(json.dumps(view.__dict__)),
         "ridge": _ridge(live),
         "layout_name": ridge_name(_ridge(live)),
-        "terrain": _public_terrain(live)
+        "terrain": _public_terrain(live),
+        "field": _field(live)
     };
     if live.practice is not None {
         payload["mode"] = "practice";
@@ -950,15 +990,16 @@ def _launch(
     live.world.drop_projectiles();
     live.world.deal_damage = weapon == "shell";
     origin = _launcher(live, seat);
+    long = _long(live);
     live.world.add_projectile(
         "shot",
         origin[0],
         origin[1],
         power * math.cos(angle),
         power * math.sin(angle),
-        0.16
+        LONG_SHELL_R if long else 0.16
     );
-    outcome = live.world.simulate(max_steps=1400);
+    outcome = live.world.simulate(max_steps=LONG_STEPS if long else 1400);
     _apply_hit(live, outcome, weapon);
     if reveal {
         _reveal_on(live, outcome, seat, now_ms, weapon);
@@ -1012,6 +1053,9 @@ def take_shot(
     }
     spot = _launcher(live, seat);
     aim = release_pull(seat, pointer_x, pointer_y, canvas_w, canvas_h, dpr, True, False, False, spot[0], spot[1]);
+    if _long(live) {
+        aim = release_long(seat, pointer_x, pointer_y, canvas_w, canvas_h, dpr, True, False, False);
+    }
     if not aim.fired {
         return _encode(live, player_id, server_now(), False, aim.reason, "", False, 0.0);
     }
@@ -1030,7 +1074,8 @@ def take_shot(
         return _encode(live, player_id, server_now(), False, "epoch", weapon, False, 0.0);
     }
     checked = accept_shot(
-        live.table.rules, seat, expected_revision, expected_turn, weapon, aim.angle, aim.power
+        live.table.rules, seat, expected_revision, expected_turn, weapon, aim.angle, aim.power,
+        LONG_V_MAX if _long(live) else 22.0
     );
     if not checked.ok {
         return _encode(live, player_id, server_now(), False, checked.code, weapon, False, 0.0);

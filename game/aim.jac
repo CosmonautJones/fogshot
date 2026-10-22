@@ -107,3 +107,69 @@ def short_guide(seat: str, angle: float, power: float) -> list[tuple[float, floa
     }
     return points;
 }
+
+# ---------- long-range artillery (generated ridges) ----------
+# The field is 160 m wide. A pull is measured on a fixed pad in the 800 x 400 protocol
+# frame: the client sends PAD - pull, seat B already mirrored, so the same gesture means
+# the same shot for both seats. Full pull (LONG_FULL_PULL px) launches at LONG_V_MAX.
+glob LONG_W: float = 160.0;
+glob LONG_H: float = 96.0;
+glob LONG_PAD_X: float = 400.0;
+glob LONG_PAD_Y: float = 200.0;
+glob LONG_FULL_PULL: float = 240.0;
+glob LONG_MIN_PULL: float = 12.0;
+glob LONG_V_MAX: float = 44.0;
+glob LONG_DRAG: float = 0.97;
+glob LONG_SHELL_R: float = 0.3;
+glob LONG_BLAST_R: float = 1.5;
+glob LONG_BLAST_DMG: float = 1.0;
+glob LONG_BLAST_PUSH: float = 1.6;
+glob LONG_STEPS: int = 2400;
+glob LONG_SETTLE: int = 300;
+
+# Pad pointer (protocol frame, seat-mirrored) for a world angle and speed: the inverse of release_long.
+def long_pointer(seat: str, angle: float, power: float) -> list[float] {
+    pad_angle = angle if seat == "A" else math.pi - angle;
+    span = max(0.0, min(1.0, power / LONG_V_MAX)) * LONG_FULL_PULL;
+    return [round(LONG_PAD_X - span * math.cos(pad_angle), 3), round(LONG_PAD_Y + span * math.sin(pad_angle), 3)];
+}
+
+def release_long(
+    seat: str,
+    pointer_x: float,
+    pointer_y: float,
+    canvas_w: float,
+    canvas_h: float,
+    dpr: float,
+    dragging: bool,
+    cancelled: bool,
+    extra_pointer: bool
+) -> AimResult {
+    if cancelled {
+        return AimResult(fired=False, reason="cancelled");
+    }
+    if extra_pointer {
+        return AimResult(fired=False, reason="duplicate");
+    }
+    if not dragging {
+        return AimResult(fired=False, reason="idle");
+    }
+    if canvas_w <= 0.0 or canvas_h <= 0.0 or dpr <= 0.0 or not math.isfinite(pointer_x) or not math.isfinite(pointer_y) or not math.isfinite(dpr) {
+        return AimResult(fired=False, reason="nonfinite");
+    }
+    px = pointer_x / dpr / canvas_w * 800.0;
+    py = pointer_y / dpr / canvas_h * 400.0;
+    dx = LONG_PAD_X - px;
+    dy = py - LONG_PAD_Y;
+    span = math.hypot(dx, dy);
+    if span < LONG_MIN_PULL {
+        return AimResult(fired=False, reason="short");
+    }
+    pad_angle = math.atan2(dy, dx);
+    angle = pad_angle if seat == "A" else math.pi - pad_angle;
+    if not angle_ok(seat, angle) {
+        return AimResult(fired=False, reason="angle");
+    }
+    power = min(1.0, span / LONG_FULL_PULL) * LONG_V_MAX;
+    return AimResult(fired=True, angle=angle, power=power, reason="");
+}
