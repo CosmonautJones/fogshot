@@ -12,7 +12,7 @@ keep.mkdir(exist_ok=True)
 report = json.loads((src / "destruction-report.json").read_text())
 CAPTIONS = {
     "1-before-blast": "ground before the blast", "2-blast": "shell burst + dirt clods", "3-after-blast": "crater carved, rim scorched",
-    "4-incoming-blast": "bot's shell lands on our half", "5-home-after-exchange": "home after the exchange", "6-enemy-half-crater": "own crater on the enemy half",
+    "4-incoming-blast": "bot's shell lands on our half", "5-home-after-exchange": "home after the exchange", "6-outpost-hit": "proof shell bursts on enemy outpost", "6b-outpost-debris": "fragments in the reveal patch",
     "7-overview": "overview / minimap",
 }
 def font(size):

@@ -258,3 +258,33 @@ test "carving and a long shot stay inside the phone budget" {
     assert worst < 120.0;
     assert shot_ms < 2500.0;
 }
+
+test "fragments of a hidden block reach the enemy only inside the reveal patch" {
+    live = boot_match(tempfile.mkdtemp(prefix="fogshot-debris-"), "fogshot", 3003);
+    claim_player(live, "player-a");
+    claim_player(live, "player-b");
+    for (player, seat) in [("player-a", "A"), ("player-b", "B")] {
+        assert json.loads(take_shot(live, player, "flare-" + seat, 271.0, 316.0, 800.0, 400.0, 1.0,
+            live.table.epoch, live.table.turn, live.table.revision, "flare"))["ok"];
+    }
+    proof = live.layout["proof"]["A"];
+    assert json.loads(take_shot(live, "player-a", "proof", float(proof[0]), float(proof[1]), 800.0, 400.0, 1.0,
+        live.table.epoch, live.table.turn, live.table.revision, "shell"))["ok"];
+    debris = [s for s in live.table.secrets if s.role.startswith("debris") and s.alive];
+    assert len(debris) >= 2;
+    assert all([s.owner == "B" and s.role == "debris-stone" for s in debris]);
+    seen_b = json.loads(watch(live, "player-b", 0));
+    assert len([b for b in seen_b["view"]["own"] if b["role"].startswith("debris")]) == len(debris);
+    seen_a = json.loads(watch(live, "player-a", 0));
+    assert len([b for b in seen_a["view"]["own"] if b["role"].startswith("debris")]) == 0;
+    reveal = seen_a["view"]["reveal"];
+    shown = [b for b in reveal["bodies"] if b["role"].startswith("debris")];
+    # Some fragments flew outside the patch: the attacker does not get them.
+    assert 0 < len(shown) and len(shown) < len(debris);
+    text = json.dumps(seen_a);
+    for piece in debris {
+        if piece.id not in [b["id"] for b in shown] {
+            assert piece.id not in text;
+        }
+    }
+}

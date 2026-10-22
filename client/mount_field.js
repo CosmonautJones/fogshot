@@ -436,7 +436,13 @@ function ownPads(data) {
 function paintLand(scene, data) {
     const pen = scene.landPen;
     if (!pen) return;
-    const craters = Array.isArray(data.craters) ? data.craters : [];
+    // A new crater only appears when the shell that made it lands in the playback, not when the
+    // server's answer arrives (that would spoil a 3-7 s flight).
+    const sent = Array.isArray(data.craters) ? data.craters : [];
+    const flying = Boolean(scene.path && scene.path.length && !scene.landed);
+    const craters = flying && Array.isArray(scene.shownCraters) && scene.shownCraters.length <= sent.length ? scene.shownCraters : sent;
+    if (!flying) scene.shownCraters = sent;
+    if (scene.fieldParent) scene.fieldParent.dataset.cratersShown = String(craters.length);
     const key = `${data.ridge ?? 0}:${data.epoch ?? 0}:${FIELD.mode}:${scene.seat || ""}:${JSON.stringify(craters)}`;
     if (scene.landKey === key) return;
     scene.landKey = key;
@@ -1082,6 +1088,7 @@ export function mountField(parent) {
                     this.landedAt = time;
                     this.landPoint = worldToScreen(last[0], last[1]);
                     impact(this, this.landPoint, this.pathWeapon || this.weapon, this.heading);
+                    if (this.lastData) paintLand(this, this.lastData);
                 }
                 if (point) {
                     const next = worldToScreen(point[0], point[1]);
