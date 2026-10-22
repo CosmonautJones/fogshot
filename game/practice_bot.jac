@@ -220,7 +220,7 @@ def _choose_long(data: any, targets: list[any], streak: int, rng: Rng, phase: st
     }
     # Seat A's launcher mirrors this one; generated outposts dig in 14-40 m in front of it.
     enemy_x = width - lx;
-    tx = enemy_x + rng.uniform(12.0, 42.0);
+    tx = enemy_x + rng.uniform(12.0, 58.0);
     target: any = None;
     for row in targets {
         target = row;

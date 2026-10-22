@@ -21,9 +21,9 @@ import from game.layout {
 import from physics.pymunk_driver { PhysicsWorld }
 
 glob LONG_TERRAIN_LEFT: float = -4.0;
-glob CORE_LO: float = 14.0;
-glob CORE_HI: float = 40.0;
-glob ZONE_REACH: float = 46.0;
+glob CORE_LO: float = 12.0;
+glob CORE_HI: float = 58.0;
+glob ZONE_REACH: float = 64.0;
 # Share of swept (angle, power) samples near each seat's best line that break the enemy core.
 glob LONG_EXPOSURE_MIN: float = 0.05;
 glob LONG_EXPOSURE_MAX: float = 0.3;
@@ -318,10 +318,22 @@ def long_scripted_aims(seat: str, popular: bool = False) -> list[list[float]] {
     return aims;
 }
 
-# Cheap screen: a scripted or popular pull whose free flight bursts on a core.
+# Every pull past full length is the same full-power shot, so "max power, flat" is the shot a
+# player (or script) would memorise. Measured across ridges it was the most popular family,
+# so no generated core may be burst by a full-power shot between 10 and 30 degrees.
+def long_flat_aims(seat: str) -> list[list[float]] {
+    aims: list[list[float]] = [];
+    for degrees in range(10, 31) {
+        pad = math.radians(float(degrees));
+        aims.append([pad if seat == "A" else math.pi - pad, LONG_V_MAX]);
+    }
+    return aims;
+}
+
+# Cheap screen: a scripted, popular or flat full-power pull whose free flight bursts on a core.
 def long_scripted_contact(layout: dict[str, any]) -> bool {
     for seat in ["A", "B"] {
-        for aim in long_scripted_aims(seat, True) {
+        for aim in long_scripted_aims(seat, True) + long_flat_aims(seat) {
             if long_kills(layout, seat, aim[0], aim[1]) {
                 return True;
             }
@@ -369,7 +381,7 @@ def _only(layout: dict[str, any], owner: str) -> dict[str, any] {
 def generate_long(ridge: int, secret: str) -> dict[str, any] {
     terrain = make_long_terrain(layout_seed(secret, ridge, "long-terrain"));
     spot = make_rng(layout_seed(secret, ridge, "long-launch"));
-    lx = round(spot.uniform(6.0, 10.0), 3);
+    lx = round(spot.uniform(6.0, 14.0), 3);
     pad = ground_at(terrain, lx);
     for point in terrain {
         if abs(point[0] - lx) <= 1.5 or abs(point[0] - (LONG_W - lx)) <= 1.5 {
