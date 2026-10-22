@@ -402,6 +402,7 @@ glob FRACTURE_ROLES: list[str] = ["timber", "stone"];
 glob FRAGMENTS: dict[str, int] = {"timber": 3, "stone": 4};
 glob DEBRIS_HEALTH: dict[str, float] = {"timber": 0.25, "stone": 0.7};
 glob MAX_DEBRIS: int = 24;
+glob DEBRIS_KICK: float = 4.0;
 # A moving fragment must land at least this impulse on something to hurt it (crush damage).
 glob CRUSH_MIN: float = 0.15;
 
@@ -1033,7 +1034,13 @@ obj PhysicsWorld {
                 hits.append((track.id, self.blast_damage * share));
             }
             if track.kind == "dynamic" {
-                _push(track.body, self.blast_x, self.blast_y, self.blast_push * share);
+                push = self.blast_push * share;
+                if track.role == "debris" {
+                    # A fragment is light: cap its kick at DEBRIS_KICK m/s so pieces tumble out
+                    # of the burst instead of leaving the field.
+                    push = min(push, float(track.body.mass) * DEBRIS_KICK);
+                }
+                _push(track.body, self.blast_x, self.blast_y, push);
             }
         }
         for hit in hits {

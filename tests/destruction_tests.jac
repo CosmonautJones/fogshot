@@ -288,3 +288,17 @@ test "fragments of a hidden block reach the enemy only inside the reveal patch" 
         }
     }
 }
+
+test "a burst throws fragments a few metres, not off the field" {
+    world = _field();
+    world.add_box("roof", 50.0, _gy(50.0) + 1.2, 1.0, 0.17, 0.12, 0.7, "timber");
+    world.add_static_box("post", 50.0, _gy(50.0) + 0.55, 0.3, 1.1, 99.0);
+    world.simulate(max_steps=30);
+    _shell_at(world, 50.3);
+    assert _get(world, "roof").broken;
+    world.simulate(max_steps=300);
+    for piece in _debris(world) {
+        state = world.read_state(piece);
+        assert abs(state.x - 50.0) < 8.0;
+    }
+}

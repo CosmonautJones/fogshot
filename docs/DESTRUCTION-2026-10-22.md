@@ -54,7 +54,8 @@ deterministic, and Pymunk's marching-squares is designed for exactly this.
   (largest piece first), using an LCG seeded by `crc32(block id)`: same block, same pieces, every run.
 - Fragments take their place in the parent and the parent's velocity **at that point**
   (`velocity_at_world_point`), plus a small outward (0.6 m/s) and upward (0.4 m/s) kick.
-- The burst that broke a block does not also pulverise its fresh fragments (but still pushes them).
+- The burst that broke a block does not also pulverise its fresh fragments. It still pushes them, but a
+  fragment's kick is capped at 4 m/s. Without the cap, a 0.03 kg piece of roof left the field at 37 m/s.
 - Rubble landing on the ground or on other rubble does no damage; a fragment only hurts a real block
   (e.g. a core) with an impulse of at least 0.15, so a pebble cannot snipe a core but a falling stone can.
 - **Cap**: at most 24 live fragments; the oldest are removed first.
@@ -91,7 +92,7 @@ deterministic, and Pymunk's marching-squares is designed for exactly this.
 | --- | --- |
 | Carve + re-trace dirty chunks (24 random carves, 100 m ridge) | mean 1.5 ms, worst 2.1 ms |
 | Full proof shot on a generated ridge (fire to settle, ~1,300 steps, fracture + carve) | ~7 ms server CPU, 3 fragments, 12 bodies |
-| Client frame rate, desktop 1280x800 and mobile 390x844 (headless Chromium) | see playtest below (min 58-60, median 60-61) |
+| Client frame rate (`game.loop.actualFps`, headless Chromium, through blasts and debris) | desktop 1280x800: min 59 / median 60; mobile 390x844: min 57 / median 60 |
 | Layout generation (40 ridges, now with carving and fracture in proofs) | mean 2.6 s, 0.2-8.3 s (was 0.3-9 s) |
 
 Budgets enforced by tests: mean carve < 40 ms, worst < 120 ms, one proof shot < 2.5 s, fragments <= 24.
@@ -104,18 +105,23 @@ grid-pull popularity measure is unchanged at **7 / 36 ridges (19%)** per seat (b
 
 ## Tests
 
-`tests/destruction_tests.jac` (9): deterministic carving that only touches nearby chunks and rewinds
+`tests/destruction_tests.jac` (11): deterministic carving that only touches nearby chunks and rewinds
 exactly; pads cannot be cratered; a resting (sleeping) block and a later shell fall into a fresh crater;
 fracture only past threshold and stone outlasts timber; fragments inherit velocity; fracture is
 deterministic; debris cap and gentle-contact immunity; craters and debris survive a reload, flares never
-carve, and each seat only receives the craters it may see; carve and shot cost bounds.
+carve, and each seat only receives the craters it may see; carve and shot cost bounds; a proof shell's
+fragments reach the enemy only inside the reveal patch (ids outside it never appear in the payload);
+a burst throws fragments a few metres, not off the field.
 `tests/destruction_client.test.mjs` (5): carving profile, overlap, pads, garbage rows, debris sizing.
 
 ## Playtest
 
 `qa/destruction-playtest.mjs` at 1280x800 and 390x844 (touch): ground before a blast, the burst with dirt
 clods, the crater after, the bot's shell on our half, a proof shell on the enemy outpost (fragments in
-the reveal patch) and the overview. Contact sheet `qa/destruction.png`, captures in `qa/destruction/`.
+the reveal patch) and the overview. Mid-flight check: the server had already sent the new crater
+(`craters` = 1) while the client still showed 0 until the shell landed. The playtest pins public ridges
+49183 (desktop) and 27055 (mobile), whose proof shell fractures the enemy roof on the local dev server.
+It hit both: VICTORY with fragments in the reveal patch, 0 console errors and no overflow. Contact sheet `qa/destruction.png`, captures in `qa/destruction/`.
 
 ## Known issues / not done
 

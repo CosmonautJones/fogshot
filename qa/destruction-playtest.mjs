@@ -74,7 +74,7 @@ async function aimTo(page, cdp, vp, deg, pct) {
   await drag(page, cdp, vp, dx, dy);
   await page.waitForTimeout(300);
 }
-for (const vp of [{name: "desktop", width: 1280, height: 800, touch: false, ridge: 3003}, {name: "mobile", width: 390, height: 844, touch: true, ridge: 1001}]) {
+for (const vp of [{name: "desktop", width: 1280, height: 800, touch: false, ridge: 49183}, {name: "mobile", width: 390, height: 844, touch: true, ridge: 27055}]) {
   const ctx = await browser.newContext({viewport: {width: vp.width, height: vp.height}, hasTouch: vp.touch, isMobile: vp.touch, deviceScaleFactor: vp.touch ? 2 : 1});
   const page = await ctx.newPage();
   const cdp = await ctx.newCDPSession(page);
@@ -87,7 +87,7 @@ for (const vp of [{name: "desktop", width: 1280, height: 800, touch: false, ridg
     try { const body = await r.json(); const data = JSON.parse(body.data.result); if (data && data.view) latest = data; } catch {}
   });
   const url = new URL(base); url.searchParams.set("practice", "1");
-  // Public ridges whose proof shell visibly fractures the enemy roof (see destruction_tests).
+  // Public ridges (on the local dev secret) whose proof shell visibly fractures the enemy roof.
   if (vp.ridge) url.searchParams.set("ridge", String(vp.ridge));
   await page.goto(url.toString(), {waitUntil: "domcontentloaded"});
   await until(page, () => { const d = document.getElementById("fogshot-field")?.dataset; return d?.seat === "A" && d.yourTurn === "true" && d.fieldMode === "long"; }, null, 90000);
