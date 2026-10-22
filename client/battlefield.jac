@@ -2,7 +2,7 @@
 
 import from "react" { useEffect }
 import from "@jac/runtime" { SignupResult, jacLogin, jacSignup }
-import from "./mount_field.js" { mountField, publishRoom, roomFromLocation, practiceFromLocation, navigateMode, cancelField }
+import from "./mount_field.js" { mountField, publishRoom, roomFromLocation, practiceFromLocation, ridgeFromLocation, navigateMode, cancelField }
 import from "./playback.js" { sampleAt, shellWord, isStale }
 import from "./presentation.js" { hudState }
 import from server.live { create_room, create_practice, join_seat, loose_shot, play_again, release_seat, watch_match }
@@ -160,7 +160,8 @@ async def _join() -> None {
         }
         code = str(roomFromLocation());
         if practiceFromLocation() or code == "" {
-            created = await create_practice() if practiceFromLocation() else await create_room();
+            wanted = String(ridgeFromLocation());
+            created = await create_practice(wanted) if practiceFromLocation() else await create_room(wanted);
             if generation != _generation { return; }
             opened = JSON.parse(created) as any;
             code = str(opened.room or "");
@@ -343,7 +344,7 @@ def:pub Battlefield -> JsxElement {
                 <button id="fogshot-rematch" className="utility-button" onClick={lambda (event: any) { _again(); }}>Rematch</button>
             </div>
         </header>
-        <div className="briefing"><h2>Night shift at the outpost</h2><div className="briefing-meta"><span className="record-chip" id="fogshot-record" title="Your duels on this device">RECORD 0-0</span><span>01 / RIDGELINE</span></div></div>
+        <div className="briefing"><h2>Night shift at the outpost</h2><div className="briefing-meta"><span className="record-chip" id="fogshot-record" title="Your duels on this device">RECORD 0-0</span><span id="fogshot-ridge" title="This duel's generated ridge. Share ?ridge=N to replay it.">01 / RIDGELINE</span></div></div>
         <div className="arena-frame">
             <div id="fogshot-field" role="group" aria-describedby="fogshot-pull" aria-label="Fogshot battlefield. Drag backward from your launcher and release to fire. Use the keyboard controls described below."></div>
             <div className="field-caption">THE RIDGELINE / AFTER DARK</div>

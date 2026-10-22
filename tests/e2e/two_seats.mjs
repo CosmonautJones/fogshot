@@ -5,7 +5,10 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.FOGSHOT_PLAYWRIGHT || "playwright");
 
-const url = process.env.FOGSHOT_URL || "http://127.0.0.1:8000/";
+// Ridge 0 is the classic hand-tuned fixture, so the scripted pulls below stay meaningful.
+const classic = new URL(process.env.FOGSHOT_URL || "http://127.0.0.1:8000/");
+classic.searchParams.set("ridge", "0");
+const url = classic.toString();
 const sentinels = ["12345.67", "-9876.54", "87654.32"];
 
 function fail(message) {
@@ -254,6 +257,23 @@ try {
     const after = await read(a);
     if (replayCode !== "epoch" || after.phase !== "recon" || after.epoch !== nextA.epoch) {
         fail(`stale command was not rejected: ${replayCode} ${replayText.slice(0, 500)} ${JSON.stringify(after)}`);
+    }
+    // Rematch rolled a fresh generated ridge; replay the classic fixture (ridge 0) in this
+    // untouched duel so the scripted pulls below keep their meaning.
+    const rolled = await a.evaluate(() => document.getElementById("fogshot-field").dataset.ridge);
+    if (rolled === "0" || !/^\d+$/.test(rolled || "")) {
+        fail(`rematch did not roll a generated ridge: ${rolled}`);
+    }
+    const pinned = await a.request.fetch(stale.url.replace("loose_shot", "play_again"), {
+        method: "POST",
+        headers: { authorization: stale.headers.authorization, "content-type": "application/json" },
+        data: JSON.stringify({ invite: room, ridge: "0" }),
+    });
+    if (!pinned.ok() || !JSON.parse((await pinned.json()).data.result).ok) {
+        fail(`shared ridge replay was refused: ${await pinned.text()}`);
+    }
+    for (const page of [a, b]) {
+        await page.waitForFunction(() => document.getElementById("fogshot-field")?.dataset.ridge === "0", null, { timeout: 15000 });
     }
     await pull(a, 20, 300);
     await pull(b, 60, 300);

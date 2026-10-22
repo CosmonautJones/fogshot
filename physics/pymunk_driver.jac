@@ -64,6 +64,34 @@ def _keep_shape(space, shape):
     if shape not in space.shapes:
         space.add(shape)
 
+def _keep_body(space, body, shape):
+    # Shattered blocks leave the space with their body; a restore puts both back.
+    if body not in space.bodies:
+        space.add(body)
+    if shape not in space.shapes:
+        space.add(shape)
+
+def _shatter(space, body, shape):
+    if shape in space.shapes:
+        space.remove(shape)
+    if body in space.bodies:
+        space.remove(body)
+
+def _terrain(space, points, body_id):
+    import pymunk
+    made = []
+    for index in range(len(points) - 1):
+        a = points[index]
+        b = points[index + 1]
+        segment = pymunk.Segment(space.static_body, (float(a[0]), float(a[1])), (float(b[0]), float(b[1])), 0.05)
+        segment.friction = 0.9
+        segment.elasticity = 0.0
+        segment.collision_type = 1
+        segment.fog_id = body_id
+        made.append(segment)
+    space.add(*made)
+    return len(made)
+
 def _static_box(space, body_id, x, y, w, h):
     import pymunk
     body = pymunk.Body(body_type=pymunk.Body.STATIC)
@@ -76,6 +104,9 @@ def _static_box(space, body_id, x, y, w, h):
     space.add(body, shape)
     return (body, shape)
 ::py::
+
+# Dynamic outpost blocks leave the solver when they break, so later shots pass through.
+glob SHATTER_ROLES: list[str] = ["timber", "stone"];
 
 obj BodyState {
     has id: str;
@@ -222,11 +253,18 @@ obj PhysicsWorld {
         self.space.add(segment);
     }
 
-    def add_box(body_id: str, x: float, y: float, w: float, h: float, mass: float, health: float, role: str) -> None {
+    def add_terrain(body_id: str, points: list[list[float]]) -> None {
+        # A public polyline ridge. Every segment is static ground (collision type 1).
+        self.ensure();
+        _terrain(self.space, points, body_id);
+    }
+
+    def add_box(body_id: str, x: float, y: float, w: float, h: float, mass: float, health: float, role: str, angle: float = 0.0) -> None {
         self.ensure();
         moment = _pymunk().moment_for_box(mass, (w, h));
         body = _pymunk().Body(mass, moment) as any;
         body.position = (x, y);
+        body.angle = angle;
         shape = _pymunk().Poly.create_box(body, (w, h)) as any;
         shape.friction = 0.9;
         shape.elasticity = 0.0;
@@ -412,6 +450,9 @@ obj PhysicsWorld {
             if track.role == "core" {
                 self.space.remove(track.shape);
             }
+            if track.role in SHATTER_ROLES {
+                _shatter(self.space, track.body, track.shape);
+            }
             track.broken = True;
         }
     }
@@ -480,6 +521,9 @@ obj PhysicsWorld {
             }
             if track.role == "core" and not item.broken {
                 _keep_shape(self.space, track.shape);
+            }
+            if track.role in SHATTER_ROLES and not item.broken {
+                _keep_body(self.space, track.body, track.shape);
             }
             if not item.broken and track.pin is None and track.hinged {
                 fresh = _pymunk().PinJoint(

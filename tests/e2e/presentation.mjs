@@ -11,6 +11,8 @@ const browser = await chromium.launch({headless:true,channel:process.env.FOGSHOT
 const context = await browser.newContext({viewport:{width:1280,height:1000},hasTouch:true});
 const page = await context.newPage();
 const errors = [];
+// Ridge 0 is the classic hand-tuned fixture used by the scripted pulls below.
+const classicUrl = (() => { const u = new URL(process.env.FOGSHOT_URL || "http://127.0.0.1:8000/"); u.searchParams.set("ridge","0"); return u.toString(); })();
 let shots = 0;
 const receipts = [];
 page.on("response",async response=>{if(response.url().includes("/function/loose_shot")){try{const body=await response.json();const data=JSON.parse(body.data.result);receipts.push({ok:data.ok,code:data.code,phase:data.phase,turn:data.turn});}catch{}}});
@@ -22,7 +24,7 @@ let unblockJoin;
 const joinGate=new Promise(resolve=>{unblockJoin=resolve;});
 await page.route("**/function/join_seat",async route=>{await joinGate;await route.continue();});
 try {
-    await page.goto(process.env.FOGSHOT_URL || "http://127.0.0.1:8000/",{waitUntil:"domcontentloaded"});
+    await page.goto(classicUrl,{waitUntil:"domcontentloaded"});
     await page.waitForSelector("#fogshot-field");
     const faults=[];
     if(await page.locator("#fogshot-turn").textContent()!=="Connecting...") faults.push("startup turn placeholder is damaged");
@@ -100,7 +102,7 @@ try {
     assert.equal(await field.getAttribute("data-shot-screen-x"),"");
     assert.match(await page.locator("#fogshot-observation").textContent(),/HIDDEN/);
     await page.unroute("**/function/watch_match");
-    await page.goto(process.env.FOGSHOT_URL || "http://127.0.0.1:8000/",{waitUntil:"domcontentloaded"});
+    await page.goto(classicUrl,{waitUntil:"domcontentloaded"});
     await page.waitForFunction(()=>document.getElementById("fogshot-field")?.dataset.yourTurn === "true",null,{timeout:15000});
     await field.focus(); await page.keyboard.press("ArrowDown"); await page.keyboard.press("Enter");
     await page.waitForFunction(()=>Number(document.getElementById("fogshot-field")?.dataset.revision)>0,null,{timeout:15000});

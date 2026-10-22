@@ -16,7 +16,7 @@
 #fogshot-field:focus-visible{outline:none}
 .arena-frame:has(#fogshot-field[data-your-turn="true"]){box-shadow:0 25px 70px #0004,0 0 0 1px #e7cf9355,0 0 28px #e7cf9318}
 .arena-frame:has(#fogshot-field:focus-visible){box-shadow:0 0 0 3px #f0c77b}
-@media(max-width:680px){.fogshot-shell{padding:18px 10px}.briefing .record-chip{font-size:9px;padding:2px 7px}.briefing-meta{gap:8px}.briefing span:not(.record-chip){display:none}}
+@media(max-width:680px){.fogshot-shell{padding:18px 10px}.briefing .record-chip{font-size:9px;padding:2px 7px}.briefing-meta{gap:8px}.briefing{flex-wrap:wrap;row-gap:6px}.briefing span:not(.record-chip):not(#fogshot-ridge){display:none}#fogshot-ridge{font-size:9px}}
 /* Phones held sideways: keep the whole field on screen while aiming. */
 @media(orientation:landscape) and (max-height:520px){
 .fogshot-shell{padding:6px 14px 14px}

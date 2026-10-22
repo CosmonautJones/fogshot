@@ -43,6 +43,7 @@ default = "server"
 "game.practice_bot" = "server"
 "game.private_world" = "server"
 "game.balance" = "server"
+"game.layout" = "server"
 
 [test]
 directory = "tests"

@@ -4,6 +4,7 @@ import json;
 import math;
 import from pathlib { Path }
 import from game.aim { launcher_for, release_pull }
+import from game.layout { build_world, fresh_ridge, generate, ridge_name, server_secret }
 import from game.practice_bot { choose, learn, new_memory }
 import from game.rules { MatchRules, accept_shot, copy_rules, resolve_cores }
 import from graph.supply { Cable, Site, assess }
@@ -29,7 +30,7 @@ def _practice_code(owner, attempt):
     import hashlib
     return hashlib.sha256(("practice:" + str(owner) + ":" + str(attempt)).encode()).hexdigest()[:6]
 
-def _publish_practice(directory, owner, invite, builder):
+def _publish_practice(directory, owner, invite, builder, ridge=0):
     import os
     import tempfile
     from pathlib import Path
@@ -37,7 +38,7 @@ def _publish_practice(directory, owner, invite, builder):
     parent.mkdir(parents=True, exist_ok=True)
     # A code-shaped directory becomes visible only after durable initialization.
     with tempfile.TemporaryDirectory(prefix=".practice-", dir=parent) as staging:
-        live = builder(staging, owner, invite)
+        live = builder(staging, owner, invite, ridge)
         os.rename(staging, directory)
         live.table.directory = directory
         return live
@@ -108,6 +109,39 @@ def _remember_room(code, live):
 
 def _recall_room(code):
     return _room_store().get(str(code))
+
+# A small in-memory pool of ready fresh ridges, refilled by one background thread, so
+# room creation and Rematch rarely wait on generation. Never persisted or exposed.
+_ridge_pool = []
+_ridge_pool_lock = threading.Lock()
+_ridge_pool_busy = [False]
+
+def _pool_take():
+    with _ridge_pool_lock:
+        return _ridge_pool.pop(0) if _ridge_pool else None
+
+def _pool_refill(make, size):
+    with _ridge_pool_lock:
+        if _ridge_pool_busy[0] or len(_ridge_pool) >= size:
+            return
+        _ridge_pool_busy[0] = True
+    def run():
+        try:
+            for _ in range(size * 2):
+                with _ridge_pool_lock:
+                    if len(_ridge_pool) >= size:
+                        break
+                layout = make()
+                if layout:
+                    with _ridge_pool_lock:
+                        _ridge_pool.append(layout)
+        except Exception:
+            pass
+        finally:
+            with _ridge_pool_lock:
+                _ridge_pool_busy[0] = False
+    threading.Thread(target=run, name="fogshot-ridge-pool", daemon=True).start()
+
 ::py::
 
 obj LiveMatch {
@@ -131,6 +165,8 @@ obj LiveMatch {
     has shot_path: list[list[float]] = [];
     has shot_collapse: list[list[float]] = [];
     has shot_collapse_id: str = "";
+    # None is the hand-tuned classic ridge (fixtures and legacy rooms); otherwise a generated layout.
+    has layout: any = None;
 }
 
 glob _shared: LiveMatch | None = None;
@@ -145,7 +181,117 @@ def _chain(owner: str, source_name: str, mast_name: str, core_name: str) -> tupl
     return (source, mast, core);
 }
 
+def _launcher(live: LiveMatch, seat: str) -> tuple[float, float] {
+    if live.layout is None {
+        return launcher_for(seat);
+    }
+    spot = live.layout["launcher_b"] if seat == "B" else live.layout["launcher_a"];
+    return (float(spot[0]), float(spot[1]));
+}
+
+def _ridge(live: LiveMatch) -> int {
+    return 0 if live.layout is None else int(live.layout["ridge"]);
+}
+
+def _public_terrain(live: LiveMatch) -> list[list[float]] {
+    if live.layout is None {
+        return [[-2.0, 0.0], [42.0, 0.0]];
+    }
+    return live.layout["terrain"];
+}
+
+def _arm_generated(live: LiveMatch) -> None {
+    layout = live.layout;
+    live.world = build_world(layout, True);
+    live.core_a_alive = True;
+    live.core_b_alive = True;
+    la = _launcher(live, "A");
+    lb = _launcher(live, "B");
+    secrets: list[SecretBody] = [
+        SecretBody(id="launcher-a", owner="A", x=la[0], y=la[1], w=0.4, h=0.4, angle=0.0, role="launcher", alive=True, health=1.0),
+        SecretBody(id="launcher-b", owner="B", x=lb[0], y=lb[1], w=0.4, h=0.4, angle=0.0, role="launcher", alive=True, health=1.0),
+        SecretBody(id="far-a", owner="A", x=87654.32, y=1.0, w=0.2, h=0.2, angle=0.0, role="marker", alive=True, health=1.0)
+    ];
+    for piece in layout["pieces"] {
+        secrets.append(SecretBody(
+            id=str(piece["id"]), owner=str(piece["owner"]), x=float(piece["x"]), y=float(piece["y"]),
+            w=float(piece["w"]), h=float(piece["h"]), angle=float(piece["angle"]), role=str(piece["role"]),
+            alive=True, health=float(piece["health"])
+        ));
+    }
+    secrets.append(SecretBody(id="sentinel", owner="hidden", x=12345.67, y=-9876.54, w=1.0, h=1.0, angle=0.2, role="objective", alive=True, health=9.0));
+    secrets.append(SecretBody(id="ground", owner="public", x=20.0, y=0.0, w=44.0, h=0.1, angle=0.0, role="ground", alive=True, health=1.0));
+    live.table.secrets = secrets;
+    _sync_post(live);
+}
+
+def _layout_path(directory: str) -> str {
+    return directory + "/layout.json";
+}
+
+# The canonical snapshot carries its own layout, so a snapshot and its world always agree.
+def _stored_layout(directory: str) -> any {
+    canonical = _read_file(_canonical_path(directory)) as str;
+    if canonical != "" {
+        try {
+            data = json.loads(canonical);
+            if "layout" in data {
+                return data["layout"];
+            }
+        } except Exception {
+            canonical = "";
+        }
+    }
+    raw = _read_file(_layout_path(directory)) as str;
+    if raw == "" {
+        return None;
+    }
+    return json.loads(raw)["layout"];
+}
+
+def _write_layout(directory: str, layout: any) -> None {
+    _replace_file(_layout_path(directory), json.dumps({"version": 1, "layout": layout}), False);
+}
+
+def _generate_ridge(ridge: int) -> any {
+    secret = server_secret(ROOM_ROOT);
+    wanted = ridge if ridge > 0 else fresh_ridge();
+    for attempt in range(6) {
+        layout = generate(wanted, secret);
+        if len(layout) > 0 {
+            return layout;
+        }
+        # Deterministic fallback so a shared ridge link always lands on the same duel.
+        wanted = (wanted * 7919 + 13) % 99999 + 1;
+    }
+    return None;
+}
+
+def _fresh_layout() -> any {
+    return _generate_ridge(-1);
+}
+
+# ridge: -1 fresh random, 0 classic fixture, N > 0 that public ridge on this server.
+def make_layout(ridge: int) -> any {
+    if ridge == 0 {
+        return None;
+    }
+    if ridge > 0 {
+        return _generate_ridge(ridge);
+    }
+    layout = _pool_take();
+    if layout is None {
+        layout = _fresh_layout();
+    }
+    _pool_refill(_fresh_layout, 2);
+    return layout;
+}
+
 def _arm(live: LiveMatch) -> None {
+    if live.layout is not None {
+        _arm_generated(live);
+        return;
+    }
     world = PhysicsWorld();
     world.add_ground("ground", -2.0, 0.0, 42.0, 0.0);
     # Pointer (20, 300) on an 800 by 400 canvas is angle 0 at power 5.
@@ -211,10 +357,17 @@ def _arm(live: LiveMatch) -> None {
     _sync_post(live);
 }
 
-def boot_match(directory: str, invite: str = "fogshot") -> LiveMatch {
+def boot_match(directory: str, invite: str = "fogshot", ridge: int = 0) -> LiveMatch {
     Path(directory).mkdir(parents=True, exist_ok=True);
+    stored = _stored_layout(directory);
+    if stored is None and ridge != 0 {
+        stored = make_layout(ridge);
+        if stored is not None {
+            _write_layout(directory, stored);
+        }
+    }
     table = reload_table(invite, directory);
-    live = LiveMatch(table=table, world=PhysicsWorld());
+    live = LiveMatch(table=table, world=PhysicsWorld(), layout=stored);
     side_a = _chain("A", "launcher-a", "mast-a", "core-a");
     side_b = _chain("B", "launcher-b", "mast-b", "core-b");
     live.source_a = side_a[0];
@@ -294,7 +447,8 @@ def _save_canonical(live: LiveMatch, fail: bool) -> None {
         "shot_path": live.shot_path,
         "shot_collapse": live.shot_collapse,
         "shot_collapse_id": live.shot_collapse_id,
-        "bodies": bodies
+        "bodies": bodies,
+        "layout": live.layout
     });
     _replace_file(_canonical_path(live.table.directory), text, fail);
 }
@@ -392,7 +546,7 @@ def shared_match() -> LiveMatch {
     return _shared as LiveMatch;
 }
 
-def open_room() -> str {
+def open_room(ridge: int = -1) -> str {
     with _room_lock("__create__") {
         attempt = 0;
         while attempt < 8 {
@@ -402,7 +556,7 @@ def open_room() -> str {
                     attempt = attempt + 1;
                     continue;
                 }
-                live = boot_match(ROOM_ROOT + "/" + code, code);
+                live = boot_match(ROOM_ROOT + "/" + code, code, ridge);
                 _remember_room(code, live);
                 return code;
             }
@@ -452,7 +606,11 @@ def _seat(live: LiveMatch, player_id: str) -> str {
 }
 
 def _sync_post(live: LiveMatch) -> None {
-    for body_id in ["enemy-post", "post-a", "spur-b", "core-a", "core-b"] {
+    for secret in live.table.secrets {
+        body_id = secret.id;
+        if secret.role in ["launcher", "marker", "ground", "objective"] {
+            continue;
+        }
         track = live.world.find(body_id);
         if track is None {
             continue;
@@ -750,10 +908,14 @@ def _encode(
         "turn": live.table.turn,
         "revision": live.table.revision,
         "room": live.table.invite,
-        "view": json.loads(json.dumps(view.__dict__))
+        "view": json.loads(json.dumps(view.__dict__)),
+        "ridge": _ridge(live),
+        "layout_name": ridge_name(_ridge(live)),
+        "terrain": _public_terrain(live)
     };
     if live.practice is not None {
         payload["mode"] = "practice";
+        payload["bot_level"] = 1 + int(live.practice.get("streak", 0));
         payload["bot_thinking"] = live.table.rules.active == "B" and live.table.rules.phase != "finished";
         payload["bot_due_at"] = int(live.practice["due"]);
     }
@@ -787,7 +949,7 @@ def _launch(
 ) -> None {
     live.world.drop_projectiles();
     live.world.deal_damage = weapon == "shell";
-    origin = launcher_for(seat);
+    origin = _launcher(live, seat);
     live.world.add_projectile(
         "shot",
         origin[0],
@@ -848,7 +1010,8 @@ def take_shot(
     if seat == "" {
         return _encode(live, player_id, server_now(), False, "unauthenticated", "", False, 0.0);
     }
-    aim = release_pull(seat, pointer_x, pointer_y, canvas_w, canvas_h, dpr, True, False, False);
+    spot = _launcher(live, seat);
+    aim = release_pull(seat, pointer_x, pointer_y, canvas_w, canvas_h, dpr, True, False, False, spot[0], spot[1]);
     if not aim.fired {
         return _encode(live, player_id, server_now(), False, aim.reason, "", False, 0.0);
     }
@@ -980,14 +1143,23 @@ def _clear_journal(directory: str, preserve_snapshot: bool = False) -> None {
     }
 }
 
-def rematch_room(live: LiveMatch, player_id: str) -> str {
+def rematch_room(live: LiveMatch, player_id: str, ridge: int = -1) -> str {
     seat = _seat(live, player_id);
     if seat == "" {
         return _encode(live, player_id, 0, False, "unauthenticated", "", False, 0.0);
     }
-    if live.table.rules.phase != "finished" {
+    # A shared ridge may replace a duel nobody has fired in yet; otherwise only a finished duel restarts.
+    untouched = ridge >= 0 and live.table.turn == 0 and live.table.rules.phase == "recon" and ridge != _ridge(live);
+    if live.table.rules.phase != "finished" and not untouched {
         return _encode(live, player_id, 0, False, "active", "", False, 0.0);
     }
+    return _restart(live, player_id, ridge);
+}
+
+# A new duel on a new layout. ridge -1 always draws a fresh random ridge.
+def _restart(live: LiveMatch, player_id: str, ridge: int) -> str {
+    previous_layout = live.layout;
+    live.layout = make_layout(ridge);
     live.table.rules = MatchRules();
     live.table.shots = 0;
     live.table.turn = 0;
@@ -1020,12 +1192,16 @@ def rematch_room(live: LiveMatch, player_id: str) -> str {
             _save_canonical(live, live.table.fail_storage);
             live.table.fail_storage = False;
         } except Exception {
+            live.layout = previous_layout;
+            _arm(live);
             _load_canonical(live);
             live.table.fail_storage = False;
             return _encode(live, player_id, 0, False, "interrupted", "", False, 0.0);
         }
+        _write_layout(live.table.directory, live.layout);
         _clear_journal(live.table.directory, True);
     } else {
+        _write_layout(live.table.directory, live.layout);
         _clear_journal(live.table.directory);
     }
     save_seats(live.table);
@@ -1033,20 +1209,21 @@ def rematch_room(live: LiveMatch, player_id: str) -> str {
 }
 
 
-def boot_practice(directory: str, owner: str, invite: str = "aabbcc") -> LiveMatch {
-    live = boot_match(directory, invite);
+def boot_practice(directory: str, owner: str, invite: str = "aabbcc", ridge: int = 0) -> LiveMatch {
+    live = boot_match(directory, invite, ridge);
     if live.practice is None {
         live.table.seat_a = owner;
         live.table.seat_b = "practice-bot-" + str(_fresh_code() as str);
         live.practice = {"owner": owner, "bot": live.table.seat_b,
-            "memory": new_memory(live.table.epoch), "due": 0, "plan": None};
+            "memory": new_memory(live.table.epoch), "due": 0, "plan": None,
+            "streak": 0, "scored": 0, "bot_seed": int(str(_fresh_code() as str), 16)};
         _save_canonical(live, False);
         save_seats(live.table);
     }
     return live;
 }
 
-def open_practice(owner: str) -> str {
+def open_practice(owner: str, ridge: int = -1) -> str {
     with _room_lock("__create__") {
         for attempt in range(8) {
             code = str(_practice_code(owner, attempt) as str);
@@ -1055,11 +1232,18 @@ def open_practice(owner: str) -> str {
                 if found is not None {
                     existing = found as LiveMatch;
                     if existing.practice is not None and str(existing.practice["owner"]) == owner {
+                        # An explicit shared ridge replaces an untouched or finished duel only.
+                        quiet = existing.table.rules.phase == "finished" or existing.table.turn == 0;
+                        if ridge >= 0 and ridge != _ridge(existing) and quiet {
+                            with _room_lock(existing.table.directory) {
+                                _restart(existing, owner, ridge);
+                            }
+                        }
                         return code;
                     }
                     continue;
                 }
-                live = _publish_practice(ROOM_ROOT + "/" + code, owner, code, boot_practice) as LiveMatch;
+                live = _publish_practice(ROOM_ROOT + "/" + code, owner, code, boot_practice, ridge) as LiveMatch;
                 _remember_room(code, live);
                 return code;
             }
@@ -1096,6 +1280,11 @@ def _practice_after_shot(live: LiveMatch, seat: str) -> None {
     }
     live.practice["plan"] = None;
     live.practice["due"] = 0;
+    if live.table.rules.result != "" and int(live.practice.get("scored", 0)) != live.table.epoch {
+        # The bot sharpens while the human keeps winning and relaxes after a loss.
+        live.practice["scored"] = live.table.epoch;
+        live.practice["streak"] = int(live.practice.get("streak", 0)) + 1 if live.table.rules.result == "A" else 0;
+    }
     if live.table.rules.active == "B" and live.table.rules.phase != "finished" {
         live.practice["due"] = max(server_now() + 1200, live.reveal_until + 400);
     }
@@ -1111,7 +1300,8 @@ def practice_watch(live: LiveMatch, player: str) -> str {
         }
         if live.practice["plan"] is None {
             observation = watch(live, str(live.practice["bot"]), server_now());
-            plan = json.loads(choose(observation, str(live.practice["memory"])));
+            skill = json.dumps({"seed": int(live.practice.get("bot_seed", 0)), "streak": int(live.practice.get("streak", 0))});
+            plan = json.loads(choose(observation, str(live.practice["memory"]), skill));
             if not bool(plan.get("ready", False)) {
                 return watch(live, player, server_now());
             }
@@ -1135,8 +1325,17 @@ def practice_watch(live: LiveMatch, player: str) -> str {
     }
 }
 
-def:protect create_practice() -> str {
-    code = open_practice(str(jid(root)));
+def _wanted_ridge(ridge: any) -> int {
+    # Shared links name a ridge; anything else (missing, malformed, out of range) draws a fresh one.
+    text = str(ridge if ridge is not None else "").strip();
+    if text == "" or len(text) > 5 or not text.isdigit() {
+        return -1;
+    }
+    return int(text);
+}
+
+def:protect create_practice(ridge: str = "") -> str {
+    code = open_practice(str(jid(root)), _wanted_ridge(ridge));
     if code == "" {
         return "{\"ok\": false, \"code\": \"full\", \"room\": \"\"}";
     }
@@ -1147,8 +1346,8 @@ def _closed() -> str {
     return "{\"ok\": false, \"code\": \"unauthenticated\", \"seat\": \"\"}";
 }
 
-def:protect create_room() -> str {
-    code = open_room();
+def:protect create_room(ridge: str = "") -> str {
+    code = open_room(_wanted_ridge(ridge));
     if code == "" {
         return "{\"ok\": false, \"code\": \"full\", \"room\": \"\"}";
     }
@@ -1171,7 +1370,9 @@ def:protect release_seat(invite: str) -> str {
     }
 }
 
-def:protect play_again(invite: str) -> str {
+# The Rematch button sends no ridge and always rolls a fresh one. An explicit
+# ridge replays that shared ridge (finished or untouched duels only).
+def:protect play_again(invite: str, ridge: str = "") -> str {
     found = _match_for(invite);
     if found is None {
         return _closed();
@@ -1182,7 +1383,7 @@ def:protect play_again(invite: str) -> str {
         if not _visit(live, player) {
             return _closed();
         }
-        return rematch_room(live, player);
+        return rematch_room(live, player, _wanted_ridge(ridge));
     }
 }
 
