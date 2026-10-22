@@ -1,9 +1,10 @@
-"""Long-range artillery ridges: a 160 m field, outposts dug in near their own launcher.
+"""Long-range artillery ridges: a 124-160 m field, outposts dug in near their own launcher.
 
-Each seat's hidden outpost sits 14-40 m in front of its own launcher, so an attack
-crosses roughly 95-135 m of public terrain. Shells fly with light drag and burst on
+Each seat's attack distance (launcher to enemy core) is drawn evenly from 82-124 m (+-2 m); the
+launcher gap (100-148 m) and field width (124-160 m) follow, and each hidden outpost sits
+12-58 m in front of its own launcher, inside its own half. Shells fly with light drag and burst on
 first contact (blast radius LONG_BLAST_R); a core breaks when the burst lands within
-about 0.7 m of it. Validation is the same contract as the classic generator, retuned:
+about 0.9 m of it. Validation is the same contract as the classic generator, retuned:
 a swept angle/power window must be hittable but narrow for both seats, the
 scripted flare + lob and the most popular pulls must not break a core, and real
 Pymunk proof shots must break each core.
@@ -21,6 +22,10 @@ import from game.layout {
 import from physics.pymunk_driver { PhysicsWorld }
 
 glob LONG_TERRAIN_LEFT: float = -4.0;
+glob LONG_MIN_W: float = 124.0;
+# Every generated core is at least this far from the enemy launcher.
+glob LONG_MIN_ATTACK: float = 82.0;
+glob LONG_MAX_ATTACK: float = 124.0;
 glob CORE_LO: float = 12.0;
 glob CORE_HI: float = 58.0;
 glob ZONE_REACH: float = 64.0;
@@ -148,8 +153,8 @@ def is_long(layout: any) -> bool {
     return layout is not None and str(layout.get("mode", "short")) == "long";
 }
 
-# Public rolling ground across the whole 160 m field, mirrored at the midline.
-def make_long_terrain(seed: int) -> list[list[float]] {
+# Public rolling ground across the whole field (default 160 m), mirrored at the midline.
+def make_long_terrain(seed: int, width: float = LONG_W) -> list[list[float]] {
     rng = make_rng(seed);
     base = rng.uniform(0.4, 1.2);
     a1 = rng.uniform(0.4, 1.3);
@@ -161,14 +166,14 @@ def make_long_terrain(seed: int) -> list[list[float]] {
     a3 = rng.uniform(0.03, 0.1);
     f3 = rng.uniform(0.9, 1.4);
     p3 = rng.uniform(0.0, 6.283);
-    mid = LONG_W / 2.0;
+    mid = width / 2.0;
     # No man's land: one big central hill, or twin hills around a valley.
     twin = rng.chance(0.45);
     hill_h = rng.uniform(5.0, 11.0) if not twin else rng.uniform(3.5, 8.0);
     hill_w = rng.uniform(7.0, 16.0) if not twin else rng.uniform(4.0, 8.0);
     hill_off = 0.0 if not twin else rng.uniform(10.0, 22.0);
     dip = 0.0 if not twin else rng.uniform(0.0, 0.8);
-    side_x = rng.uniform(28.0, 60.0);
+    side_x = rng.uniform(0.35, 0.75) * mid;
     side_h = rng.uniform(1.0, 4.5);
     side_w = rng.uniform(3.0, 7.0);
     count = int(mid - LONG_TERRAIN_LEFT) + 1;
@@ -186,9 +191,14 @@ def make_long_terrain(seed: int) -> list[list[float]] {
         points.append([LONG_TERRAIN_LEFT + float(index), half[index]]);
     }
     for index in range(count - 2, -1, -1) {
-        points.append([LONG_W - (LONG_TERRAIN_LEFT + float(index)), half[index]]);
+        points.append([width - (LONG_TERRAIN_LEFT + float(index)), half[index]]);
     }
     return points;
+}
+
+# Generated long terrain runs from LONG_TERRAIN_LEFT to width - LONG_TERRAIN_LEFT.
+def terrain_width(terrain: list[list[float]]) -> float {
+    return round(float(terrain[len(terrain) - 1][0]) + float(terrain[0][0]), 4);
 }
 
 def terrain_top(terrain: list[list[float]]) -> float {
@@ -226,7 +236,7 @@ def long_exposure(layout: dict[str, any], seat: str) -> tuple[float, list[list[f
     sign = 1.0 if seat == "A" else -1.0;
     found = _scan(
         float(launcher[0]), float(launcher[1]), sign, float(core[0]), SCAN_ANGLES, SCAN_SPAN, SCAN_SAMPLES,
-        probes, _heights(terrain), LONG_TERRAIN_LEFT, terrain_top(terrain), LONG_W, LONG_SHELL_R, LONG_DRAG,
+        probes, _heights(terrain), LONG_TERRAIN_LEFT, terrain_top(terrain), terrain_width(terrain), LONG_SHELL_R, LONG_DRAG,
         LONG_V_MAX, core, kill_reach()
     ) as tuple[int, list[list[float]]];
     if found[0] == 0 {
@@ -241,7 +251,7 @@ def long_contact(layout: dict[str, any], seat: str, angle: float, power: float) 
     terrain = layout["terrain"];
     probes = _probe_rows(layout["pieces"], "", LONG_SHELL_R);
     return _fly(float(launcher[0]), float(launcher[1]), angle, power, probes, _heights(terrain),
-        LONG_TERRAIN_LEFT, terrain_top(terrain), LONG_W, False, LONG_SHELL_R, LONG_DRAG) as tuple[str, float, float];
+        LONG_TERRAIN_LEFT, terrain_top(terrain), terrain_width(terrain), False, LONG_SHELL_R, LONG_DRAG) as tuple[str, float, float];
 }
 
 def long_kills(layout: dict[str, any], seat: str, angle: float, power: float) -> bool {
@@ -363,13 +373,42 @@ def long_scripted_breaks(layout: dict[str, any]) -> bool {
     return False;
 }
 
-def _long_candidate(ridge: int, secret: str, attempt: int, terrain: list[list[float]], lx: float, ly: float, side_a: int) -> dict[str, any] {
-    rx = round(LONG_W - lx, 4);
+# Attack distances (launcher to enemy core) are drawn first and evenly in
+# [LONG_MIN_ATTACK, LONG_MAX_ATTACK] for each seat; the launcher gap and field width follow.
+# Drawing the field first piled most cores up 80-90 m away, which made one remembered pull
+# hit about 30% of ridges.
+def long_plan(seed: int) -> list[float] {
+    rng = make_rng(seed);
+    for _ in range(400) {
+        da = rng.uniform(LONG_MIN_ATTACK, LONG_MAX_ATTACK);
+        db = rng.uniform(LONG_MIN_ATTACK, LONG_MAX_ATTACK);
+        # Launcher gaps that keep both cores 12-58 m deep and inside their owner's half.
+        low = max(100.0, max(da, db) + CORE_LO);
+        high = min(148.0, min(da, db) + CORE_HI, 2.0 * (min(da, db) - 10.0));
+        if low > high {
+            continue;
+        }
+        gap = rng.uniform(low, high);
+        width = 2.0 * float(round((gap + 2.0 * rng.uniform(6.0, 12.0)) / 2.0));
+        lx = round((width - gap) / 2.0, 3);
+        if width < LONG_MIN_W or width > LONG_W or lx < 6.0 or lx > 12.0 {
+            continue;
+        }
+        # [width, launcher x, seat A's core depth, seat B's core depth] (depth in front of own launcher)
+        return [width, lx, round(gap - db, 3), round(gap - da, 3)];
+    }
+    return [140.0, 9.0, 30.0, 30.0];
+}
+
+def _long_candidate(ridge: int, secret: str, attempt: int, terrain: list[list[float]], lx: float, ly: float, side_a: int, depth_a: float, depth_b: float) -> dict[str, any] {
+    width = terrain_width(terrain);
+    rx = round(width - lx, 4);
+    reach = min(ZONE_REACH, width / 2.0 - lx - 4.0);
     return {"ridge": ridge, "name": ridge_name(ridge), "classic": False, "mode": "long",
-        "width": LONG_W, "height": LONG_H,
+        "width": width, "height": LONG_H,
         "launcher_a": [lx, ly], "launcher_b": [rx, ly], "terrain": terrain,
-        "pieces": make_outpost(layout_seed(secret, ridge, "long-b:" + str(attempt)), "B", terrain, rx, ly, -1.0, CORE_LO, CORE_HI, ZONE_REACH)
-            + make_outpost(layout_seed(secret, ridge, "long-a:" + str(attempt) + ":" + str(side_a)), "A", terrain, lx, ly, 1.0, CORE_LO, CORE_HI, ZONE_REACH)};
+        "pieces": make_outpost(layout_seed(secret, ridge, "long-b:" + str(attempt)), "B", terrain, rx, ly, -1.0, depth_b - 2.0, depth_b + 2.0, reach)
+            + make_outpost(layout_seed(secret, ridge, "long-a:" + str(attempt) + ":" + str(side_a)), "A", terrain, lx, ly, 1.0, depth_a - 2.0, depth_a + 2.0, reach)};
 }
 
 def _only(layout: dict[str, any], owner: str) -> dict[str, any] {
@@ -379,24 +418,38 @@ def _only(layout: dict[str, any], owner: str) -> dict[str, any] {
 
 # Deterministic for (secret, ridge). Returns {} only if no fair layout was found.
 def generate_long(ridge: int, secret: str) -> dict[str, any] {
-    terrain = make_long_terrain(layout_seed(secret, ridge, "long-terrain"));
-    spot = make_rng(layout_seed(secret, ridge, "long-launch"));
-    lx = round(spot.uniform(6.0, 14.0), 3);
+    for round_no in range(4) {
+        tag = "" if round_no == 0 else ":" + str(round_no);
+        found = _generate_round(ridge, secret, tag, round_no * 10);
+        if len(found) > 0 {
+            return found;
+        }
+    }
+    return {};
+}
+
+# One field plan (width, launchers, core depths) and ten outpost attempts on it.
+def _generate_round(ridge: int, secret: str, tag: str, first: int) -> dict[str, any] {
+    plan = long_plan(layout_seed(secret, ridge, "long-plan" + tag));
+    width = plan[0];
+    lx = plan[1];
+    spot = make_rng(layout_seed(secret, ridge, "long-launch" + tag));
+    terrain = make_long_terrain(layout_seed(secret, ridge, "long-terrain" + tag), width);
     pad = ground_at(terrain, lx);
     for point in terrain {
-        if abs(point[0] - lx) <= 1.5 or abs(point[0] - (LONG_W - lx)) <= 1.5 {
+        if abs(point[0] - lx) <= 1.5 or abs(point[0] - (width - lx)) <= 1.5 {
             point[1] = pad;
         }
     }
     ly = round(pad + spot.uniform(2.5, 4.0), 4);
-    for attempt in range(40) {
-        side = _long_candidate(ridge, secret, attempt, terrain, lx, ly, 0);
+    for attempt in range(first, first + 10) {
+        side = _long_candidate(ridge, secret, attempt, terrain, lx, ly, 0, plan[2], plan[3]);
         seen_b = long_exposure(_only(side, "B"), "A");
         if seen_b[0] < LONG_EXPOSURE_MIN or seen_b[0] > LONG_EXPOSURE_MAX {
             continue;
         }
         for side_a in range(8) {
-            layout = _long_candidate(ridge, secret, attempt, terrain, lx, ly, side_a);
+            layout = _long_candidate(ridge, secret, attempt, terrain, lx, ly, side_a, plan[2], plan[3]);
             if len(geometry_faults(layout)) > 0 {
                 continue;
             }
@@ -433,5 +486,5 @@ def generate_long(ridge: int, secret: str) -> dict[str, any] {
 # Public free flight over the public ground only (no hidden pieces): (kind, x, y).
 def free_flight(terrain: list[list[float]], x0: float, y0: float, angle: float, power: float) -> tuple[str, float, float] {
     return _fly(x0, y0, angle, power, [], _heights(terrain), float(terrain[0][0]), terrain_top(terrain),
-        LONG_W, False, LONG_SHELL_R, LONG_DRAG) as tuple[str, float, float];
+        terrain_width(terrain), False, LONG_SHELL_R, LONG_DRAG) as tuple[str, float, float];
 }

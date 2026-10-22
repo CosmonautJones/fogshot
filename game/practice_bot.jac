@@ -218,9 +218,13 @@ def _choose_long(data: any, targets: list[any], streak: int, rng: Rng, phase: st
     if len(terrain) < 2 {
         return json.dumps({"ready": False});
     }
-    # Seat A's launcher mirrors this one; generated outposts dig in 14-40 m in front of it.
+    # Seat A's launcher mirrors this one. Public generator rules: outposts dig in 12-58 m in
+    # front of their launcher, inside their own half, 80-124 m from the enemy launcher.
     enemy_x = width - lx;
-    tx = enemy_x + rng.uniform(12.0, 58.0);
+    gap = lx - enemy_x;
+    near = max(12.0, gap - 124.0);
+    deep = max(near + 0.5, min(58.0, gap / 2.0 - 10.0, gap - 80.0));
+    tx = enemy_x + rng.uniform(near, deep);
     target: any = None;
     for row in targets {
         target = row;

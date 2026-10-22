@@ -77,7 +77,7 @@ def _seated(ridge: int) -> any {
 test "the same ridge and secret always rebuild the same layout" {
     first = generate_long(48213, SECRET);
     assert len(first) > 0;
-    assert first["mode"] == "long" and first["width"] == LONG_W;
+    assert first["mode"] == "long" and first["width"] >= 124.0 and first["width"] <= LONG_W;
     assert json.dumps(first, sort_keys=True) == json.dumps(generate_long(48213, SECRET), sort_keys=True);
     assert first["name"] == ridge_name(48213);
     assert "#48213" in first["name"];
@@ -98,6 +98,8 @@ test "forty ridges give forty distinct layouts" {
     launchers = set([float(layout["launcher_a"][0]) for layout in layouts]);
     assert len(cores) >= 15;
     assert len(launchers) >= 20;
+    widths = set([float(layout["width"]) for layout in layouts]);
+    assert len(widths) >= 8;
     hills = set([round(max([float(p[1]) for p in layout["terrain"]]), 0) for layout in layouts]);
     assert len(hills) >= 5;
     roles = set();
@@ -120,15 +122,17 @@ test "every generated layout is long range, valid, stable, reachable and balance
         assert len(layout["proof"]["A"]) == 2 and len(layout["proof"]["B"]) == 2;
         # Terrain is mirrored (public); both launchers sit on the same height.
         assert layout["launcher_a"][1] == layout["launcher_b"][1];
-        assert abs(ground_at(layout["terrain"], 30.0) - ground_at(layout["terrain"], LONG_W - 30.0)) < 0.0001;
-        # Artillery scale: launchers ~130-150 m apart, every core 85+ m from the enemy launcher.
+        width = float(layout["width"]);
+        assert width >= 124.0 and width <= LONG_W;
+        assert abs(ground_at(layout["terrain"], 30.0) - ground_at(layout["terrain"], width - 30.0)) < 0.0001;
+        # Artillery scale: launchers 100-148 m apart, every core 78+ m from the enemy launcher.
         gap = float(layout["launcher_b"][0]) - float(layout["launcher_a"][0]);
-        assert gap >= 130.0 and gap <= 150.0;
+        assert gap >= 100.0 and gap <= 148.0;
         core_a = _find(layout, "core-a");
         core_b = _find(layout, "core-b");
-        assert float(core_a["x"]) < LONG_W / 2.0 and float(core_b["x"]) > LONG_W / 2.0;
-        assert float(core_b["x"]) - float(layout["launcher_a"][0]) >= 85.0;
-        assert float(layout["launcher_b"][0]) - float(core_a["x"]) >= 85.0;
+        assert float(core_a["x"]) < width / 2.0 and float(core_b["x"]) > width / 2.0;
+        assert float(core_b["x"]) - float(layout["launcher_a"][0]) >= 78.0;
+        assert float(layout["launcher_b"][0]) - float(core_a["x"]) >= 78.0;
     }
     for layout in _sample()[:6] {
         assert settle_drift(layout) <= 0.12;
@@ -193,7 +197,7 @@ test "the ridge is public but the generated layout stays private" {
     assert view["ridge"] == int(layout["ridge"]) and view["ridge"] > 0;
     assert view["layout_name"] == ridge_name(int(layout["ridge"]));
     assert view["terrain"] == layout["terrain"];
-    assert view["field"]["mode"] == "long" and view["field"]["w"] == LONG_W and view["field"]["v_max"] == LONG_V_MAX;
+    assert view["field"]["mode"] == "long" and view["field"]["w"] == layout["width"] and view["field"]["v_max"] == LONG_V_MAX;
     for leak in ["proof", "exposure", "attempt", "pieces", "layout-test", "core-a", "footing-a"] {
         assert leak not in seen;
     }
@@ -277,7 +281,7 @@ test "practice bot is seeded, varies between duels and sharpens with the streak"
 def _long_observation(layout: dict[str, any], reveal: any) -> str {
     spot = layout["launcher_b"];
     return json.dumps({"seat": "B", "your_turn": True, "phase": "combat", "turn": 5, "epoch": 1,
-        "reveal_until": 100 if reveal is not None else 0, "field": {"mode": "long", "w": LONG_W, "h": 96.0},
+        "reveal_until": 100 if reveal is not None else 0, "field": {"mode": "long", "w": layout["width"], "h": 96.0},
         "terrain": layout["terrain"], "view": {"own": [{"id": "launcher-b", "role": "launcher", "x": spot[0], "y": spot[1], "alive": True}],
         "public": [], "reveal": reveal}});
 }

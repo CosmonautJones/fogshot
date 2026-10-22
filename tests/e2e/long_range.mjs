@@ -25,7 +25,7 @@ async function run(vp) {
     await page.goto(practice.toString(),{waitUntil:"domcontentloaded"});
     await page.waitForFunction(()=>{const d=document.getElementById("fogshot-field")?.dataset;return d?.seat==="A" && d.yourTurn==="true" && d.fieldMode==="long";},null,{timeout:90000});
     const start = await data(page);
-    assert.equal(start.fieldW,"160");
+    assert.ok(Number(start.fieldW)>=124 && Number(start.fieldW)<=160,"long field width "+start.fieldW);
     assert.equal(start.camera,"home");
     assert.equal(Number(start.cameraX),0,"seat A home view should start at its own edge");
     assert.ok(await page.locator("#fogshot-fire").isDisabled(),"FIRE must wait for an aim");

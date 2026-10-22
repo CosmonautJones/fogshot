@@ -206,7 +206,7 @@ def _long(live: LiveMatch) -> bool {
 }
 
 def _field_width(live: LiveMatch) -> float {
-    return LONG_W if _long(live) else 40.0;
+    return float(live.layout.get("width", LONG_W)) if _long(live) else 40.0;
 }
 
 # Public field facts the client needs to scale, aim and preview; nothing hidden.
@@ -214,7 +214,7 @@ def _field(live: LiveMatch) -> dict[str, any] {
     if not _long(live) {
         return {"mode": "classic", "w": 40.0, "h": 16.0};
     }
-    return {"mode": "long", "w": LONG_W, "h": LONG_H, "pad_x": LONG_PAD_X, "pad_y": LONG_PAD_Y,
+    return {"mode": "long", "w": _field_width(live), "h": LONG_H, "pad_x": LONG_PAD_X, "pad_y": LONG_PAD_Y,
         "full_pull": LONG_FULL_PULL, "min_pull": LONG_MIN_PULL, "v_max": LONG_V_MAX,
         "gravity": 9.81, "drag": LONG_DRAG, "shell": LONG_SHELL_R, "blast": LONG_BLAST_R};
 }
