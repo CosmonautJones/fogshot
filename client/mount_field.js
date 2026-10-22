@@ -4,7 +4,7 @@
 // not integrate a shot or decide a hit.
 import { AUTO, Game, Scale } from "phaser";
 import "../assets/field.css";
-import { bodySize, pullFeedback, hudState, protocolPull, observationAt, trianglePoints, headingOf, easeOutBack, easeOutCubic, burst, stepShards, bannerFor, recordAfter, recordLabel } from "./presentation.js";
+import { bodySize, pullFeedback, hudState, protocolPull, observationAt, trianglePoints, headingOf, easeOutBack, easeOutCubic, burst, stepShards, bannerFor, recordAfter, recordLabel, ridgeLines, terrainPolygon, ridgeLabel } from "./presentation.js";
 import { isStale, releaseAllowed, sampleAt, stepWatch } from "./playback.js";
 
 const ARENA_W = 40;
@@ -126,7 +126,7 @@ function animate(scene, time, delta) {
     // Aim chevrons: triangles rotated to the launch angle, pulsing outward with a sine wave.
     const pull = scene.activePull;
     if (pull) {
-        const aim = pullFeedback(scene.seat, pull);
+        const aim = pullFeedback(scene.seat, pull, launcherWorld(scene));
         const heading = -aim.angle; // world y-up angle -> screen y-down angle
         const color = aim.valid ? 0xf1d18b : 0xb98472;
         aim.guide.forEach((point, n) => {
@@ -233,6 +233,8 @@ function revealedBodies(view) {
 function drawBodies(pen, bodies, friendly, scene) {
     for (const body of bodies) {
         if (["ground", "marker", "launcher"].includes(body.role)) continue;
+        // Shattered blocks are gone from the world; do not leave a grey ghost.
+        if (body.alive === false && ["timber", "stone", "spur"].includes(body.role)) continue;
         const center = worldToScreen(body.x, body.y);
         if (center.x < -40 || center.x > VIEW_W + 40) continue;
         const { width, height } = bodySize(body);
@@ -242,7 +244,8 @@ function drawBodies(pen, bodies, friendly, scene) {
         pen.translateCanvas(center.x, center.y);
         pen.rotateCanvas(-(falling ? scene.collapseAngle : body.angle));
         const edge = friendly ? 0x8fc5b6 : 0xe5b56c;
-        const dark = body.alive === false ? 0x39494a : friendly ? 0x355d63 : 0x7e694b;
+        const tone = { footing: friendly ? 0x23434b : 0x4f4434, plinth: friendly ? 0x2c5058 : 0x66573f, stone: friendly ? 0x46666b : 0x857865, timber: friendly ? 0x3c6158 : 0x8a6a43, spur: friendly ? 0x2a4a50 : 0x5d5040 }[body.role];
+        const dark = body.alive === false ? 0x39494a : tone ?? (friendly ? 0x355d63 : 0x7e694b);
         pen.fillStyle(dark, 1);
         pen.fillRect(-width / 2, -height / 2, width, height);
         // All material detail stays inside the server-sized silhouette.
@@ -257,6 +260,24 @@ function drawBodies(pen, bodies, friendly, scene) {
             pen.fillCircle(0, 0, Math.min(width, height) * .18);
             pen.fillStyle(0xf0e9c8, .85);
             for (const x of [-.35, .35]) for (const y of [-.35, .35]) pen.fillCircle(x * width, y * height, Math.min(1.2, inset));
+        } else if (body.role === "stone" && width > 6 && height > 6) {
+            // Masonry: staggered courses.
+            pen.lineStyle(1, edge, .4);
+            let row = 0;
+            for (let y = -height / 2 + 6; y < height / 2 - 1; y += 6, row++) {
+                pen.lineBetween(-width / 2 + inset, y, width / 2, y);
+                for (let x = -width / 2 + (row % 2 ? 5 : 9); x < width / 2 - 2; x += 9) pen.lineBetween(x, y - 6, x, y);
+            }
+        } else if (body.role === "timber" && width > 4 && height > 4) {
+            // Timber: grain lines along the long axis plus an X brace.
+            pen.lineStyle(1, edge, .45);
+            if (height >= width) for (let x = -width / 2 + 4; x < width / 2 - 1; x += 4) pen.lineBetween(x, -height / 2 + inset, x, height / 2);
+            else for (let y = -height / 2 + 4; y < height / 2 - 1; y += 4) pen.lineBetween(-width / 2 + inset, y, width / 2, y);
+            if (width > 9 && height > 9) { pen.lineStyle(1, edge, .3); pen.lineBetween(-width / 2, -height / 2, width / 2, height / 2); pen.lineBetween(width / 2, -height / 2, -width / 2, height / 2); }
+        } else if (body.role === "footing" || body.role === "spur") {
+            // Rubble footing: a row of small triangles along the top edge.
+            pen.fillStyle(edge, .35);
+            for (let x = -width / 2 + 5; x < width / 2 - 3; x += 9) pen.fillTriangle(x - 3, -height / 2 + inset + 4, x + 3, -height / 2 + inset + 4, x, -height / 2 + inset);
         } else if (height > 12 && width > 4) {
             pen.lineStyle(1, edge, .65);
             for (let y = -height / 2 + 7; y < height / 2 - 6; y += 12) {
@@ -267,11 +288,71 @@ function drawBodies(pen, bodies, friendly, scene) {
     }
 }
 
-function launcherOf(scene) {
-    for (const body of ownBodies(scene.view)) {
-        if (body.role === "launcher") return worldToScreen(body.x, body.y);
+// Screen y of the public ground under screen x (classic ground is the SVG soil line).
+function groundScreenY(terrain, x) {
+    if (!Array.isArray(terrain) || terrain.length < 2) return 397;
+    const wx = x / 20;
+    for (let i = 1; i < terrain.length; i++) {
+        const [x0, y0] = terrain[i - 1], [x1, y1] = terrain[i];
+        if (wx <= x1) {
+            const t = x1 === x0 ? 0 : Math.min(1, Math.max(0, (wx - x0) / (x1 - x0)));
+            const gy = y0 + (y1 - y0) * t;
+            return gy <= 0.001 ? 397 : (1 - gy / 16) * 400;
+        }
     }
-    return worldToScreen(scene.seat === "B" ? 34 : 6, 4);
+    return 397;
+}
+
+function launcherWorld(scene) {
+    for (const body of ownBodies(scene.view)) {
+        if (body.role === "launcher") return { x: body.x, y: body.y };
+    }
+    return { x: scene.seat === "B" ? 34 : 6, y: 4 };
+}
+
+function launcherOf(scene) {
+    const spot = launcherWorld(scene);
+    return worldToScreen(spot.x, spot.y);
+}
+
+// Public terrain and seeded distant ridgelines. Redrawn only when the ridge changes.
+function paintLand(scene, data) {
+    const pen = scene.landPen;
+    if (!pen) return;
+    const key = `${data.ridge ?? 0}:${data.epoch ?? 0}`;
+    if (scene.landKey === key) return;
+    scene.landKey = key;
+    pen.clear();
+    const lines = ridgeLines(Number(data.ridge || 0));
+    const tones = [0x2e5360, 0x264753, 0x1f3d48];
+    lines.forEach((points, i) => {
+        pen.fillStyle(tones[i % tones.length], .6 + i * .12);
+        pen.beginPath(); pen.moveTo(0, 400);
+        for (const p of points) pen.lineTo(p.x, p.y);
+        pen.lineTo(800, 400); pen.closePath(); pen.fillPath();
+        pen.lineStyle(1.2, 0x9fbfb2, .14 + i * .05);
+        pen.beginPath(); pen.moveTo(points[0].x, points[0].y);
+        for (const p of points) pen.lineTo(p.x, p.y);
+        pen.strokePath();
+    });
+    const ground = terrainPolygon(data.terrain);
+    if (ground.length && Number(data.ridge || 0) > 0) {
+        pen.fillStyle(0x16303a, 1);
+        pen.beginPath(); pen.moveTo(ground[0].x, ground[0].y);
+        for (const p of ground) pen.lineTo(p.x, p.y);
+        pen.closePath(); pen.fillPath();
+        // Strata: faint offset copies of the crest give the soil some depth.
+        for (const [drop, alpha] of [[7, .18], [15, .1]]) {
+            pen.lineStyle(1, 0x5f8a83, alpha);
+            pen.beginPath(); pen.moveTo(ground[0].x, ground[0].y + drop);
+            for (const p of ground.slice(0, -2)) pen.lineTo(p.x, p.y + drop);
+            pen.strokePath();
+        }
+        pen.lineStyle(3, 0x82a99a, .5);
+        pen.beginPath(); pen.moveTo(ground[0].x, ground[0].y);
+        for (const p of ground.slice(0, -2)) pen.lineTo(p.x, p.y);
+        pen.strokePath();
+    }
 }
 
 function drawLauncher(pen, scene, pull) {
@@ -279,11 +360,17 @@ function drawLauncher(pen, scene, pull) {
     scene.launch = launch;
     const direction = scene.seat === "B" ? -1 : 1;
     // Indestructible launch utility; its decorative pedestal is not a target.
+    // On generated ridges the tower reaches down to the public ground under it.
+    const foot = Math.max(launch.y + 60, groundScreenY(scene.terrain, launch.x) - 1);
+    const tall = foot - (launch.y + 29);
     pen.fillStyle(0x0c2730, 1);
-    pen.fillRect(launch.x - 19, launch.y + 29, 38, 68);
+    pen.fillRect(launch.x - 19, launch.y + 29, 38, tall);
     pen.lineStyle(2, 0x456d71, 1);
-    pen.lineBetween(launch.x - 15, launch.y + 93, launch.x + 15, launch.y + 32);
-    pen.lineBetween(launch.x + 15, launch.y + 93, launch.x - 15, launch.y + 32);
+    for (let top = launch.y + 32; top < foot - 8; top += 61) {
+        const bottom = Math.min(foot - 4, top + 61);
+        pen.lineBetween(launch.x - 15, bottom, launch.x + 15, top);
+        pen.lineBetween(launch.x + 15, bottom, launch.x - 15, top);
+    }
     pen.fillStyle(0x244751, 1);
     pen.fillRoundedRect(launch.x - 30, launch.y + 23, 60, 12, 3);
     pen.fillStyle(0x83b8a9, 1);
@@ -292,7 +379,7 @@ function drawLauncher(pen, scene, pull) {
     pen.lineBetween(launch.x - 13, launch.y + 23, launch.x - 8, launch.y - 10);
     pen.lineBetween(launch.x + 13, launch.y + 23, launch.x + 8, launch.y - 10);
     pen.lineStyle(2, 0xd8c48b, 1);
-    const aim = pull ? pullFeedback(scene.seat, pull) : null;
+    const aim = pull ? pullFeedback(scene.seat, pull, launcherWorld(scene)) : null;
     const pouch = pull ? { x: launch.x - Math.cos(aim.angle) * Math.min(30, aim.power * 4), y: launch.y + Math.sin(aim.angle) * Math.min(30, aim.power * 4) } : launch;
     pen.lineBetween(launch.x - 8, launch.y - 10, pouch.x, pouch.y);
     pen.lineBetween(launch.x + 8, launch.y - 10, pouch.x, pouch.y);
@@ -394,6 +481,7 @@ function renderHud(data) {
     const rematch = document.getElementById("fogshot-rematch");
     if (rematch) { rematch.disabled = data.phase !== "finished"; rematch.title = data.phase === "finished" ? "Play another duel (R)" : "Available after the duel"; rematch.classList.toggle("is-ready", data.phase === "finished"); }
     put("fogshot-room", data.mode === "practice" ? "Practice bot" : data.room || "------");
+    put("fogshot-ridge", ridgeLabel(data));
     put("fogshot-turn", status.turn);
     put("fogshot-weapon", status.weapon);
     put("fogshot-supply", status.supply);
@@ -414,9 +502,17 @@ export function cancelField() {
     if (button) button.disabled = true;
 }
 
+// `?ridge=N` replays a shared ridge (0 is the classic fixture); a missing value draws a fresh one.
+export function ridgeFromLocation() {
+    const raw = new URLSearchParams(window.location.search).get("ridge");
+    return raw !== null && /^\d{1,5}$/.test(raw) ? Number(raw) : -1;
+}
+
 export function navigateMode(practice) {
     const url = new URL(window.location.href);
+    const ridge = ridgeFromLocation();
     url.search = "";
+    if (ridge >= 0) url.searchParams.set("ridge", String(ridge));
     url.hash = "";
     if (practice) url.searchParams.set("practice", "1");
     window.location.assign(url.toString());
@@ -442,6 +538,10 @@ function remember(parent, data) {
         parent.dataset.room = data.room;
     }
     parent.dataset.mode = data.mode || "multiplayer";
+    parent.dataset.ridge = String(data.ridge ?? 0);
+    parent.dataset.botLevel = String(data.bot_level ?? "");
+    const spot = (data.view && data.view.own || []).find(body => body.role === "launcher");
+    if (spot) { parent.dataset.launcherX = String(spot.x); parent.dataset.launcherY = String(spot.y); }
     parent.dataset.turnNumber = String(data.turn ?? 0);
     parent.dataset.botThinking = data.bot_thinking ? "true" : "false";
     parent.dataset.botDueAt = String(data.bot_due_at ?? 0);
@@ -512,6 +612,8 @@ export function mountField(parent) {
             },
             create() {
                 this.add.image(0, 0, "night-ridge").setOrigin(0);
+                this.landPen = this.add.graphics();
+                this.landKey = "";
                 const fog = this.textures.createCanvas("fog-bank", VIEW_W, VIEW_H);
                 const ctx = fog.context;
                 const shade = ctx.createLinearGradient(320, 0, 580, 0);
@@ -736,7 +838,7 @@ export function mountField(parent) {
         if (event.key === "ArrowDown") keyboardPull.y = Math.min(399, keyboardPull.y + 4);
         pull = { ...keyboardPull };
         paint(sceneRef, pull);
-        const aim = pullFeedback(sceneRef.seat, pull);
+        const aim = pullFeedback(sceneRef.seat, pull, launcherWorld(sceneRef));
         const hint = document.getElementById("fogshot-pull");
         if (hint) hint.textContent = aim.valid ? `Pull ${Math.round(aim.pullFraction * 100)}%. Enter to launch, Escape to cancel.` : "Adjust the pull behind the launcher.";
     };
@@ -893,6 +995,8 @@ export function mountField(parent) {
                 parent.dataset.shotTime = "";
             }
             remember(parent, data);
+            if (Array.isArray(data.terrain)) sceneRef.terrain = data.terrain;
+            paintLand(sceneRef, data);
             paint(sceneRef, pull);
     }
 }

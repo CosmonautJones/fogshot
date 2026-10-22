@@ -1,5 +1,9 @@
 # Build status
 
+## Procedural duels - 2026-10-21
+
+Branch `feature/procedural-duels`, stacked on `polish/playtest-pass` (PR #11); merge after #11. Every duel and rematch is played on a server-generated ridge. Ground profile, launcher position and height, core placement, footing, cover materials (timber/stone), supply mast and decoys all vary. Layouts are seeded privately from a public ridge number and a server secret, and validated for geometry, Pymunk stability, reachability (a real proof shot), balanced exposure and resistance to the old scripted lob. The practice bot's aim error is seeded and narrows with the player's practice win streak. The HUD names the ridge; `?ridge=N` replays one and `?ridge=0` is the classic fixture. See [the procedural duels report](PROCEDURAL-DUELS-2026-10-21.md). Not merged, not deployed.
+
 ## Playtest and game-feel pass - 2026-10-21
 
 Branch `polish/playtest-pass` from main `1ac71b9`. Scripted practice playtests at 1280x800 and 390x844 (touch) found a console 400 on every reload (signup before login), a landscape-phone field that ran off screen, near-invisible win/loss states and shells that parked instead of landing. All are fixed. Trig-driven presentation polish adds triangle chevrons, atan2-oriented shells and shards, sine fog wisps and pulses, result banners, R-to-rematch and a local record/streak. Server authority, physics, bot and privacy projection are unchanged. Full `scripts/verify.sh` (65 Jac, 22 Node, 4 browser suites) and `scripts/verify-sealed.sh` passed locally. See [the playtest report](PLAYTEST-POLISH-2026-10-21.md). Not merged, not deployed.

@@ -20,7 +20,7 @@ async function state(p=page) {
     return p.evaluate(()=>{const d=document.getElementById("fogshot-field").dataset;return{
         mode:d.mode,turn:Number(d.turnNumber),epoch:Number(d.epoch),revision:Number(d.revision),
         phase:d.phase,result:d.result,thinking:d.botThinking,yourTurn:d.yourTurn,
-        due:Number(d.botDueAt),room:d.room};});
+        due:Number(d.botDueAt),room:d.room,ridge:d.ridge};});
 }
 async function ready(mode, p=page) {
     await p.waitForFunction(m=>{const d=document.getElementById("fogshot-field")?.dataset;return d?.seat==="A" && d.mode===m;},mode,{timeout:30000});
@@ -51,7 +51,7 @@ async function capture(name) {
         maskColor:"#0b2029",mask:[page.locator("#fogshot-room"),page.locator("#fogshot-caption")]});
 }
 try {
-    const missing=new URL(url);missing.search="";missing.searchParams.set("room","000000");
+    const missing=new URL(url);missing.search="";missing.searchParams.set("room","000000");missing.searchParams.set("ridge","0");
     await page.goto(missing.href,{waitUntil:"domcontentloaded"});
     await page.waitForFunction(()=>document.getElementById("fogshot-caption")?.textContent.includes("unavailable"),null,{timeout:30000});
     assert.equal(await page.getByRole("button",{name:"Practice",exact:true}).count(),1,"Practice button is missing");
@@ -94,8 +94,16 @@ try {
     await page.waitForFunction(()=>document.getElementById("fogshot-field").dataset.result==="A",null,{timeout:20000});
     assert.equal(await page.locator("#fogshot-turn").innerText(),"Victory");
     await capture("practice-victory");
+    assert.equal(start.ridge,"0","shared ridge=0 link did not open the classic fixture");
     await page.getByRole("button",{name:"Rematch",exact:true}).click();
     await page.waitForFunction(e=>Number(document.getElementById("fogshot-field").dataset.epoch)>e,start.epoch);
+    const rolled=await state();
+    assert.notEqual(rolled.ridge,"0","rematch did not roll a fresh ridge");
+    assert.match(await page.locator("#fogshot-ridge").innerText(),/#\d+ · BOT LV 2/);
+    // The page URL still names ridge 0, so reloading the untouched rematch replays the classic fixture.
+    await page.reload({waitUntil:"domcontentloaded"});
+    await ready("practice");
+    await page.waitForFunction(()=>document.getElementById("fogshot-field").dataset.ridge==="0");
     let releaseDelayed, capturedDelayed;
     const delayGate=new Promise(resolve=>{releaseDelayed=resolve;});
     const capturedGate=new Promise(resolve=>{capturedDelayed=resolve;});
@@ -118,7 +126,11 @@ try {
     releaseDelayed();
     await page.waitForTimeout(250);
     await page.unroute("**/function/watch_match",delayedRoute);
-    await pull(20,300);
+    // The bot's aim now carries seeded error, so it may need a few shells; ours land short.
+    for(let shots=0;shots<8 && (await state()).result!=="B";shots++) {
+        const fired=await pull(20,300);
+        await page.waitForFunction(t=>{const d=document.getElementById("fogshot-field").dataset;return d.result==="B" || (d.yourTurn==="true" && Number(d.turnNumber)>t);},fired.turn,{timeout:20000});
+    }
     await page.waitForFunction(()=>document.getElementById("fogshot-field").dataset.result==="B",null,{timeout:20000});
     assert.equal(await page.locator("#fogshot-turn").innerText(),"Outpost lost");
     await capture("practice-loss");

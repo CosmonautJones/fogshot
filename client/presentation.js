@@ -3,11 +3,14 @@ export function bodySize(body) {
     return { width: Math.max(0, body.w * 20), height: Math.max(0, body.h * 25) };
 }
 
-export function pullFeedback(seat, pointer) {
-    const origin = { x: seat === "B" ? 680 : 120, y: 300 };
+// `launcher` is the seat's public launcher in world metres (generated ridges move it).
+export function pullFeedback(seat, pointer, launcher) {
+    const lx = launcher && Number.isFinite(launcher.x) ? launcher.x : seat === "B" ? 34 : 6;
+    const ly = launcher && Number.isFinite(launcher.y) ? launcher.y : 4;
+    const origin = { x: lx * 20, y: (1 - ly / 16) * 400 };
     const wx = pointer.x / 20;
-    const dx = (seat === "B" ? 34 : 6) - wx;
-    const dy = 4 - (1 - pointer.y / 400) * 16;
+    const dx = lx - wx;
+    const dy = ly - (1 - pointer.y / 400) * 16;
     const rawPower = Math.hypot(dx, dy);
     const angle = Math.atan2(dy, dx);
     const power = Math.min(22, rawPower);
@@ -148,4 +151,52 @@ export function recordLabel(record) {
     const draws = record.draws ? `-${record.draws}` : "";
     const streak = record.streak > 1 ? ` · STREAK ${record.streak}` : "";
     return `RECORD ${record.wins}-${record.losses}${draws}${streak} · BEST ${record.best}`;
+}
+
+// ---- Procedural ridge art (presentation only; terrain is public, structures never are) ----
+
+// Small seeded PRNG for cosmetic variety keyed by the public ridge number.
+export function ridgeRandom(seed) {
+    let state = (Math.abs(Math.floor(seed)) * 2654435761 + 1013904223) >>> 0 || 1;
+    return () => {
+        state ^= state << 13; state >>>= 0;
+        state ^= state >>> 17;
+        state ^= state << 5; state >>>= 0;
+        return state / 4294967296;
+    };
+}
+
+// Distant silhouettes: each layer sums a few sines with seeded wavelengths and phases.
+// Returns screen polylines (800 x 400), back layer first.
+export function ridgeLines(ridge, layers = 3, step = 16) {
+    if (!ridge || ridge <= 0) return [];
+    const rand = ridgeRandom(ridge);
+    const out = [];
+    for (let layer = 0; layer < layers; layer++) {
+        const base = 228 + layer * 30 + rand() * 14;
+        const waves = [0, 1, 2].map(k => ({ amp: (16 - layer * 3) / (k + 1) * (.6 + rand() * .8), freq: (k + 1) * (.006 + rand() * .01), phase: rand() * Math.PI * 2 }));
+        const points = [];
+        for (let x = 0; x <= 800; x += step) {
+            let y = base;
+            for (const w of waves) y -= w.amp * Math.sin(x * w.freq + w.phase);
+            // A sharp triangular peak now and then, like a far relay crag.
+            y -= Math.max(0, 1 - Math.abs(((x * .004 + layer * .37 + waves[0].phase) % 1) - .5) * 9) * (10 - layer * 2);
+            points.push({ x, y: Math.round(y * 10) / 10 });
+        }
+        out.push(points);
+    }
+    return out;
+}
+
+// Public ground profile (world metres) to a closed screen polygon down to the bottom edge.
+export function terrainPolygon(terrain) {
+    if (!Array.isArray(terrain) || terrain.length < 2) return [];
+    const top = terrain.map(([x, y]) => ({ x: x * 20, y: (1 - y / 16) * 400 }));
+    return [...top, { x: top[top.length - 1].x, y: 400 }, { x: top[0].x, y: 400 }];
+}
+
+export function ridgeLabel(data) {
+    if (!data || data.ridge === undefined) return "01 / RIDGELINE";
+    const name = String(data.layout_name || (data.ridge > 0 ? `Ridge #${data.ridge}` : "Classic ridge")).toUpperCase();
+    return data.mode === "practice" && data.bot_level ? `${name} · BOT LV ${data.bot_level}` : name;
 }

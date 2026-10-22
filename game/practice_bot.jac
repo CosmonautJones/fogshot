@@ -1,7 +1,13 @@
-"""Deterministic practice aim. Input is a copied legal seat observation, never a world."""
+"""Practice aim. Input is a copied legal seat observation, never a world.
+
+Decisions are deterministic for (observation, memory, skill). `skill` carries the
+bot's private seed and the human's practice win streak: aim error is drawn from
+that seed and shrinks as the streak grows and as the bot keeps firing in a duel.
+"""
 import json;
 import math;
 import from game.aim { release_pull }
+import from game.layout { make_rng }
 
 def new_memory(epoch: int) -> str {
     return json.dumps({"epoch": epoch, "targets": []});
@@ -53,14 +59,30 @@ def learn(observation: str, memory: str, now_ms: int) -> str {
     return json.dumps({"epoch": epoch, "targets": bounded});
 }
 
-def _distance(px: float, py: float, tx: float, ty: float) -> float {
-    aim = release_pull("B", px, py, 800.0, 400.0, 1.0, True, False, False);
+# Error scale in canvas pixels: wide for a new player, tight once they are on a streak,
+# and tighter with each further shell in the same duel. Never exactly zero.
+def aim_sigma(streak: int, shells_fired: int) -> float {
+    return max(1.0, 26.0 * math.pow(0.7, float(max(0, streak))) * math.pow(0.75, float(max(0, shells_fired))));
+}
+
+def _launcher(data: any) -> tuple[float, float] {
+    view = data.get("view", {}) or {};
+    for row in view.get("own", []) or [] {
+        if str(row.get("role", "")) == "launcher" {
+            return (float(row.get("x", 34.0)), float(row.get("y", 4.0)));
+        }
+    }
+    return (34.0, 4.0);
+}
+
+def _distance(px: float, py: float, tx: float, ty: float, lx: float = 34.0, ly: float = 4.0) -> float {
+    aim = release_pull("B", px, py, 800.0, 400.0, 1.0, True, False, False, lx, ly);
     if not aim.fired {
         return 99999.0;
     }
     # Free-flight guess using public gravity/damping. No collision queries or hidden layout.
-    x = 34.0;
-    y = 4.0;
+    x = lx;
+    y = ly;
     vx = math.cos(aim.angle) * aim.power;
     vy = math.sin(aim.angle) * aim.power;
     best = 99999.0;
@@ -81,7 +103,7 @@ def _distance(px: float, py: float, tx: float, ty: float) -> float {
     return best;
 }
 
-def choose(observation: str, memory: str) -> str {
+def choose(observation: str, memory: str, skill: str = "{}") -> str {
     data = json.loads(observation);
     phase = str(data.get("phase", ""));
     if str(data.get("seat", "")) != "B" or not bool(data.get("your_turn", False)) or phase not in ["recon", "combat"] {
@@ -98,11 +120,22 @@ def choose(observation: str, memory: str) -> str {
             }
         }
     }
+    profile = json.loads(skill or "{}");
+    streak = int(profile.get("streak", 0));
+    rng = make_rng(int(profile.get("seed", 0)) * 7919 + epoch * 104729 + turn * 31);
+    spot = _launcher(data);
+    lx = spot[0];
+    ly = spot[1];
+    # Pointer range behind this launcher, in seat B's mirrored canvas coordinates.
+    back = max(12.0, (40.0 - lx) * 20.0 - 10.0);
+    low = min(390.0, max(300.0, (1.0 - ly / 16.0) * 400.0));
     slot = (turn // 2) % 6;
     xs = [20.0, 60.0, 95.0, 20.0, 40.0, 80.0];
     ys = [390.0, 300.0, 340.0, 360.0, 380.0, 395.0];
-    px = xs[slot];
-    py = ys[slot];
+    # The opening flare follows the pattern; later blind shells wander so no two duels search alike.
+    wander = 0.0 if phase == "recon" else 1.0;
+    px = min(back, max(2.0, xs[slot] * back / 110.0 + wander * rng.uniform(-8.0, 8.0)));
+    py = min(399.0, max(low, low + (ys[slot] - 300.0) * (399.0 - low) / 99.0 + wander * rng.uniform(-6.0, 6.0)));
     target: any = None;
     for row in targets {
         target = row;
@@ -114,9 +147,11 @@ def choose(observation: str, memory: str) -> str {
         tx = float(target["x"]);
         ty = float(target["y"]);
         best = 99999.0;
-        for cx in [5.0, 20.0, 40.0, 60.0, 80.0, 100.0] {
-            for cy in [300.0, 320.0, 340.0, 360.0, 380.0, 395.0] {
-                score = _distance(cx, cy, tx, ty);
+        for i in range(12) {
+            cx = 2.0 + (back - 2.0) * float(i) / 11.0;
+            for j in range(10) {
+                cy = low + (399.0 - low) * float(j) / 9.0;
+                score = _distance(cx, cy, tx, ty, lx, ly);
                 if score < best {
                     best = score;
                     px = cx;
@@ -124,9 +159,16 @@ def choose(observation: str, memory: str) -> str {
                 }
             }
         }
-        # Stable small aiming errors, not random physics or privileged perfect hits.
-        px = max(1.0, min(110.0, px + float((turn + epoch) % 3 - 1) * 3.0));
-        py = max(300.0, min(399.0, py + float((turn + 2 * epoch) % 3 - 1) * 5.0));
+        # Seeded human-like aim error. Shells already fired this duel: turns 3, 5, 7...
+        sigma = aim_sigma(streak, max(0, (turn - 3) // 2));
+        wobble_x = px + rng.gauss() * sigma;
+        wobble_y = py + rng.gauss() * sigma * 0.8;
+        wobble_x = max(1.0, min(back, wobble_x));
+        wobble_y = max(low, min(399.0, wobble_y));
+        if release_pull("B", wobble_x, wobble_y, 800.0, 400.0, 1.0, True, False, False, lx, ly).fired {
+            px = wobble_x;
+            py = wobble_y;
+        }
     }
     weapon = "flare" if phase == "recon" else "shell";
     return json.dumps({"ready": True, "weapon": weapon, "x": px, "y": py});

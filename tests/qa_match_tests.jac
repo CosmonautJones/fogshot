@@ -153,7 +153,8 @@ test "restart keeps both seats, the dark supply, the dead core, and rematch" {
     assert "core-a" not in json.dumps(restored_b);
     assert "12345.67" not in json.dumps(restored_b);
     assert "87654.32" not in json.dumps(restored_b);
-    again = json.loads(rematch_room(restarted, "player-a"));
+    # Classic ridge again so the old core coordinate stays a meaningful leak sentinel.
+    again = json.loads(rematch_room(restarted, "player-a", 0));
     assert again["ok"];
     assert again["seat"] == "A";
     assert again["phase"] == "recon";

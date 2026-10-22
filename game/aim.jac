@@ -41,7 +41,9 @@ def release_pull(
     dpr: float,
     dragging: bool,
     cancelled: bool,
-    extra_pointer: bool
+    extra_pointer: bool,
+    launcher_x: float = -1.0,
+    launcher_y: float = -1.0
 ) -> AimResult {
     if cancelled {
         return AimResult(fired=False, reason="cancelled");
@@ -61,6 +63,10 @@ def release_pull(
     fraction = px / canvas_w;
     world_x = fraction * ARENA_W if seat == "A" else (1.0 - fraction) * ARENA_W;
     launcher = launcher_for(seat);
+    if launcher_x >= 0.0 and launcher_y >= 0.0 {
+        # Generated ridges move the launcher; the pull is still measured from it.
+        launcher = (launcher_x, launcher_y);
+    }
     dx = launcher[0] - world_x;
     dy = launcher[1] - world_y;
     power = math.hypot(dx, dy);
