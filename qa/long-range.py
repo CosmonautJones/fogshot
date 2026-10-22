@@ -37,27 +37,30 @@ desk = [(s, fit(i, 400)) for s, i in rows[0][1]] if rows else []
 th = max((i.height for _, i in desk), default=260)
 mob = [(s, i.resize((round(i.width * th / i.height), th))) for s, i in (rows[1][1] if len(rows) > 1 else [])]
 cols = 5
-def grid_h(n, h):
-    return ((n + cols - 1) // cols) * (h + label + pad)
 mw = max((i.width for _, i in mob), default=200)
 width = pad + cols * (400 + pad)
-height = 60 + 34 + grid_h(len(desk), th) + 34 + ((len(mob) + 8) // 9) * (th + label + pad)
+sections = []
+for run, tiles, tw in [(rows[0][0] if rows else None, desk, 400), (rows[1][0] if len(rows) > 1 else None, mob, mw)]:
+    if run is None:
+        continue
+    per = max(1, (width - pad) // (tw + pad))
+    sections.append((run, tiles, tw, per, ((len(tiles) + per - 1) // per) * (th + label + pad)))
+height = 60 + sum(34 + h for *_, h in sections) + pad
 sheet = Image.new("RGB", (width, height), "#0b2029")
 draw = ImageDraw.Draw(sheet)
-f = rows[0][0]["field"] if rows else {}
-draw.text((pad, 14), f"FOGSHOT / long-range artillery   field {f.get('w')} m (was 40 m), ridge #{f.get('ridge')}", fill="#dfeadf", font=font(22))
+draw.text((pad, 14), "FOGSHOT / long-range artillery: camera follow, burst, incoming shell, minimap look (classic field was 40 m)", fill="#dfeadf", font=font(22))
 y = 60
-for title, tiles, tw in [("Desktop 1280x800", desk, 400), ("Mobile 390x844 (touch)", mob, mw)]:
-    draw.text((pad, y + 6), title, fill="#f1d18b", font=font(18))
+for run, tiles, tw, per, h in sections:
+    f = run["field"]
+    name = "Desktop 1280x800" if run["vp"] == "desktop" else "Mobile 390x844 (touch)"
+    draw.text((pad, y + 6), f"{name}   ridge #{f['ridge']}, field {f['w']} m", fill="#f1d18b", font=font(18))
     y += 34
-    per = cols if tw == 400 else max(1, (width - pad) // (tw + pad))
     for i, (s, img) in enumerate(tiles):
         x = pad + (i % per) * (tw + pad)
         yy = y + (i // per) * (th + label + pad)
-        draw.text((x + 2, yy + 4), f"{s['name']}: {CAPTIONS.get(s['name'], '')}"[:44], fill="#dfeadf", font=font(13))
+        draw.text((x + 2, yy + 4), f"{s['name']}: {CAPTIONS.get(s['name'], '')}"[:max(14, tw // 8)], fill="#dfeadf", font=font(13))
         sheet.paste(img, (x, yy + label))
-    y += ((len(tiles) + per - 1) // per) * (th + label + pad) if tiles else 0
-sheet = sheet.crop((0, 0, width, y + pad))
+    y += h
 dest = here / "long-range.png"
 sheet.save(dest)
 print(dest)

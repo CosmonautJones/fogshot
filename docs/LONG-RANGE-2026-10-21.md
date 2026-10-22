@@ -87,3 +87,19 @@ slice once generation is faster.
 - Very long flights on phones: the minimap strip is small (26-47 px); tap targets are fine but the shell dot is tiny.
 - Pymunk and the analytic validator agree for the proof shots, but tiny numeric differences mean a swept-window
   edge shot can differ between the screen and the live world.
+
+## Verification and playtest
+
+- `scripts/verify.sh`: 74 Jac tests (including the rewritten `tests/layout_tests.jac`), 30 Node tests (new
+  `tests/long_client.test.mjs`), and the shot-race, two-seat, presentation, practice and new `long_range.mjs`
+  browser suites all pass.
+- `scripts/verify-sealed.sh`: the sealed build plus the shot-race, two-seat, practice and (new) long-range suites
+  against `dist/fogshot.jab` all pass.
+- Playtest (`qa/long-playtest.mjs`, then `python3 qa/long-range.py`): practice duels at 1280x800 and at 390x844 touch.
+  Each run fired a flare and a shell about 90-100 m downrange. Captures show the home view, the locked aim, the camera
+  following the shell (`cameraX` up to ~1350 px), the burst and reveal, the bot's incoming shell, the minimap look at the
+  enemy side and the return home. No console errors, no horizontal overflow. Contact sheet: `qa/long-range.png`;
+  frames: `qa/long-range/`. Shots are clipped to the field and aim bar, so they show no room code.
+- Fixed during the playtest: on phones, Phaser re-reads the canvas position only every 500 ms, so a layout shift
+  just before a touch skewed the first drag (a 36 deg pull read as 23 deg). The field now refreshes the canvas bounds
+  on every press.
